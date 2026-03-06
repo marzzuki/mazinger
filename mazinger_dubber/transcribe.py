@@ -232,6 +232,7 @@ def _transcribe_openai(
     model: str = "whisper-1",
     language: str | None = None,
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> tuple[list[dict], str]:
     """Transcribe using OpenAI's Whisper API.
 
@@ -241,7 +242,12 @@ def _transcribe_openai(
     """
     from openai import OpenAI
 
-    client = OpenAI(api_key=api_key)
+    kwargs: dict[str, Any] = {}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = OpenAI(**kwargs)
 
     with open(audio_path, "rb") as audio_file:
         # Request segment-level timestamps (more cost-effective than word-level)
@@ -425,6 +431,7 @@ def transcribe(
     max_duration: float = 10.0,
     skip_resegment: bool = False,
     openai_api_key: str | None = None,
+    openai_base_url: str | None = None,
 ) -> str:
     """Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, or WhisperX.
 
@@ -472,6 +479,7 @@ def transcribe(
             model=model or default_model,
             language=language,
             api_key=openai_api_key,
+            base_url=openai_base_url,
         )
     elif method == "faster-whisper":
         default_model = "large-v3"

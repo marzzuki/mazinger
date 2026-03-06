@@ -36,6 +36,7 @@ def _cmd_dub(args: argparse.Namespace) -> None:
 
     rs = MazingerDubber(
         openai_api_key=args.openai_api_key,
+        openai_base_url=args.openai_base_url,
         llm_model=args.llm_model,
         base_dir=args.base_dir,
     )
@@ -115,6 +116,7 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         max_duration=args.max_duration,
         skip_resegment=args.no_resegment,
         openai_api_key=args.openai_api_key,
+        openai_base_url=args.openai_base_url,
     )
     print(f"SRT saved: {args.output}")
 
@@ -125,7 +127,12 @@ def _cmd_thumbnails(args: argparse.Namespace) -> None:
     from mazinger_dubber.thumbnails import select_timestamps, extract_frames
     from mazinger_dubber.utils import save_json
 
-    client = OpenAI(api_key=args.openai_api_key)
+    client_kwargs = {}
+    if args.openai_api_key:
+        client_kwargs["api_key"] = args.openai_api_key
+    if args.openai_base_url:
+        client_kwargs["base_url"] = args.openai_base_url
+    client = OpenAI(**client_kwargs)
     with open(args.srt, encoding="utf-8") as fh:
         srt_text = fh.read()
 
@@ -143,7 +150,12 @@ def _cmd_describe(args: argparse.Namespace) -> None:
     from mazinger_dubber.describe import describe_content
     from mazinger_dubber.utils import load_json, save_json
 
-    client = OpenAI(api_key=args.openai_api_key)
+    client_kwargs = {}
+    if args.openai_api_key:
+        client_kwargs["api_key"] = args.openai_api_key
+    if args.openai_base_url:
+        client_kwargs["base_url"] = args.openai_base_url
+    client = OpenAI(**client_kwargs)
     with open(args.srt, encoding="utf-8") as fh:
         srt_text = fh.read()
     thumb_paths = load_json(args.thumbnails_meta)
@@ -159,7 +171,12 @@ def _cmd_translate(args: argparse.Namespace) -> None:
     from mazinger_dubber.translate import translate_srt
     from mazinger_dubber.utils import load_json
 
-    client = OpenAI(api_key=args.openai_api_key)
+    client_kwargs = {}
+    if args.openai_api_key:
+        client_kwargs["api_key"] = args.openai_api_key
+    if args.openai_base_url:
+        client_kwargs["base_url"] = args.openai_base_url
+    client = OpenAI(**client_kwargs)
     with open(args.srt, encoding="utf-8") as fh:
         srt_text = fh.read()
     description = load_json(args.description)
@@ -177,9 +194,14 @@ def _cmd_resegment(args: argparse.Namespace) -> None:
     from mazinger_dubber.resegment import resegment_srt
 
     client = None
-    if args.openai_api_key:
+    if args.openai_api_key or args.openai_base_url:
         from openai import OpenAI
-        client = OpenAI(api_key=args.openai_api_key)
+        client_kwargs = {}
+        if args.openai_api_key:
+            client_kwargs["api_key"] = args.openai_api_key
+        if args.openai_base_url:
+            client_kwargs["base_url"] = args.openai_base_url
+        client = OpenAI(**client_kwargs)
 
     with open(args.srt, encoding="utf-8") as fh:
         srt_text = fh.read()
@@ -268,6 +290,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--llm-model", default="gpt-4.1", help="LLM model for translation/analysis.")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key.")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     p.add_argument(
         "--cookies-from-browser", default=None,
         help="Pass through to yt-dlp --cookies-from-browser (e.g., chrome or firefox:default).",
@@ -318,6 +341,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-duration", type=float, default=10.0, help="Max seconds per subtitle.")
     p.add_argument("--no-resegment", action="store_true", help="Skip resegmentation.")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key (for --method openai).")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     _add_common_args(p)
 
     # -- thumbnails -------------------------------------------------------------
@@ -328,6 +352,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--meta", default=None, help="Path to save metadata JSON.")
     p.add_argument("--llm-model", default="gpt-4.1", help="LLM model.")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key.")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     _add_common_args(p)
 
     # -- describe ---------------------------------------------------------------
@@ -337,6 +362,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="Output JSON path.")
     p.add_argument("--llm-model", default="gpt-4.1", help="LLM model.")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key.")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     _add_common_args(p)
 
     # -- translate --------------------------------------------------------------
@@ -347,6 +373,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="Output SRT path.")
     p.add_argument("--llm-model", default="gpt-4.1", help="LLM model.")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key.")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     _add_common_args(p)
 
     # -- resegment --------------------------------------------------------------
@@ -357,6 +384,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-dur", type=float, default=4.0, help="Max seconds per subtitle.")
     p.add_argument("--llm-model", default="gpt-4.1", help="LLM model (optional).")
     p.add_argument("--openai-api-key", default=None, help="OpenAI API key (enables LLM splitting).")
+    p.add_argument("--openai-base-url", default=None, help="Base URL for OpenAI-compatible API.")
     _add_common_args(p)
 
     # -- tts --------------------------------------------------------------------

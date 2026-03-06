@@ -29,12 +29,14 @@ class MazingerDubber:
     def __init__(
         self,
         openai_api_key: str | None = None,
-        llm_model: str = "gpt-4.1",
+        openai_base_url: str | None = None,
+        llm_model: str | None = None,
         base_dir: str = ".",
     ) -> None:
-        self.llm_model = llm_model
+        self.llm_model = llm_model or os.environ.get("OPENAI_MODEL") or "gpt-4.1"
         self.base_dir = base_dir
         self._api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+        self._base_url = openai_base_url or os.environ.get("OPENAI_BASE_URL")
 
     # ------------------------------------------------------------------
     #  Internal helpers
@@ -43,7 +45,12 @@ class MazingerDubber:
     def _openai_client(self) -> Any:
         from openai import OpenAI
 
-        return OpenAI(api_key=self._api_key)
+        kwargs: dict[str, Any] = {}
+        if self._api_key:
+            kwargs["api_key"] = self._api_key
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        return OpenAI(**kwargs)
 
     # ------------------------------------------------------------------
     #  Public API
@@ -166,6 +173,7 @@ class MazingerDubber:
                 model=whisper_model,
                 device=device,
                 openai_api_key=self._api_key,
+                openai_base_url=self._base_url,
             )
 
         # 3. Extract thumbnails ------------------------------------------

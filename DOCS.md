@@ -373,7 +373,9 @@ projects/<slug>/
 
 | Environment variable | Purpose                                          |
 |----------------------|--------------------------------------------------|
-| `OPENAI_API_KEY`     | OpenAI API key (transcription + LLM tasks)       |
+| `OPENAI_API_KEY`     | API key (transcription + LLM tasks)              |
+| `OPENAI_BASE_URL`    | Base URL for OpenAI-compatible API providers     |
+| `OPENAI_MODEL`       | Default LLM model for translation/analysis       |
 
 All settings can also be passed via constructor arguments or CLI flags.
 
