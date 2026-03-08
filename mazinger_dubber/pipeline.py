@@ -240,7 +240,9 @@ class MazingerDubber:
                 fh.write(resegmented)
 
         # 7. TTS ---------------------------------------------------------
-        srt_entries = parse_file(proj.translated_raw_srt)
+        # Use the resegmented SRT (merged phrases) so TTS doesn't produce
+        # awkward gaps in the middle of a sentence.
+        srt_entries = parse_file(proj.final_srt)
         original_duration = get_audio_duration(proj.audio)
 
         device_for_tts = device.split(":")[0] + ":0" if ":" not in device else device

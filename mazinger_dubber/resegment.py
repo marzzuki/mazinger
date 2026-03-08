@@ -1,4 +1,12 @@
-"""Re-segment translated SRT into readable, properly-timed caption blocks."""
+"""Re-segment translated SRT into readable, properly-timed caption blocks.
+
+Two-phase approach:
+1. **Merge** – consecutive SRT entries that are fragments of the same sentence
+   or speech phrase are combined so TTS never generates audio for an incomplete
+   thought (avoids unnatural mid-sentence pauses).
+2. **Split** – entries that are too long for comfortable subtitles are broken
+   at natural clause/sentence boundaries.
+"""
 
 from __future__ import annotations
 
@@ -15,23 +23,230 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-MAX_CHARS = 84
-MAX_DUR = 4.0
+MAX_CHARS = 300
+MAX_DUR = 30.0
 MIN_DUR = 1.0
+_MERGE_BATCH_SIZE = 40
+_MAX_MERGE_GROUP = 8
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Phase 1 – Merge fragments into complete phrases
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_MERGE_SYSTEM = """\
+You are a speech-aware subtitle editor preparing subtitles for \
+text-to-speech synthesis. Your goal is to merge consecutive subtitle \
+entries so that each resulting entry is a COMPLETE SPOKEN THOUGHT — \
+a full phrase or group of closely related sentences that a speaker would \
+naturally say without a long pause.
+
+This is critical: TTS will generate audio for each entry independently. \
+If an entry is an incomplete fragment (e.g. "But what" or \
+"One of the biggest challenges people face when working in"), the \
+generated speech will sound broken and unnatural.
+
+MERGE AGGRESSIVELY:
+- Merge any entries that are fragments of the same sentence.
+- Merge follow-up sentences that continue the same idea or thought \
+  (e.g. a rhetorical question immediately followed by its answer).
+- Merge short transitional phrases ("But let's move on—") with the \
+  sentence that follows.
+- It is BETTER to merge too much than too little. A longer entry that \
+  reads as one spoken paragraph is fine.
+
+LIMITS:
+- Maximum 8 consecutive entries per group.
+- Do NOT merge entries that are clearly about different topics or \
+  separated by a natural topic shift.
+- Each merged result should be at most ~500 characters.
+
+FORMAT:
+- Return a JSON array of arrays. Each inner array lists the 1-based \
+  entry numbers to merge.
+- Every entry number must appear in exactly one group.
+- Only consecutive entries may be grouped.
+- Return ONLY the JSON array — no markdown fences, no commentary.
+
+EXAMPLE INPUT:
+1: "But what"
+2: "makes this application special, and why is it important?"
+3: "One of the biggest challenges people face when working in"
+4: "data science is that their software engineering knowledge is often quite limited. Why is that?"
+5: "While learning—whether it's data science, machine learning, or analytics—"
+6: "most of the time,"
+7: "you're guided to experiment with certain things."
+8: "Notebooks are your testing ground."
+
+EXAMPLE OUTPUT: [[1, 2], [3, 4], [5, 6, 7], [8]]"""
+
+# Only real sentence-ending punctuation — NOT em-dashes, commas, colons, or
+# trailing quotes/parens which often appear mid-thought.
+_SENTENCE_END_RE = re.compile(r'[.!?…؟。！？]\s*$')
+
+
+def _validate_merge_groups(groups: list, n: int) -> bool:
+    """Check that *groups* cover entries 1..n exactly once, in order."""
+    if not isinstance(groups, list):
+        return False
+    seen: set[int] = set()
+    prev_max = 0
+    for group in groups:
+        if not isinstance(group, list) or not group:
+            return False
+        if len(group) > _MAX_MERGE_GROUP:
+            return False
+        nums: list[int] = []
+        for idx in group:
+            if not isinstance(idx, (int, float)):
+                return False
+            idx = int(idx)
+            if idx < 1 or idx > n or idx in seen:
+                return False
+            seen.add(idx)
+            nums.append(idx)
+        nums_sorted = sorted(nums)
+        if nums_sorted != list(range(nums_sorted[0], nums_sorted[-1] + 1)):
+            return False
+        if nums_sorted[0] <= prev_max:
+            return False
+        prev_max = nums_sorted[-1]
+    return len(seen) == n
+
+
+def _llm_merge_batch(
+    blocks: list[tuple[str, float, float, str]],
+    client: OpenAI,
+    llm_model: str,
+) -> list[list[int]] | None:
+    """Ask the LLM which consecutive entries should be merged."""
+    lines = []
+    for i, (_, _s, _e, text) in enumerate(blocks, 1):
+        lines.append(f'{i}: "{text.strip()}"')
+    entries_text = "\n".join(lines)
+
+    try:
+        resp = client.chat.completions.create(
+            model=llm_model,
+            temperature=0.1,
+            messages=[
+                {"role": "system", "content": _MERGE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        "Merge these subtitle entries as needed:\n\n"
+                        + entries_text
+                    ),
+                },
+            ],
+        )
+        groups = json_repair.loads(resp.choices[0].message.content)
+        if _validate_merge_groups(groups, len(blocks)):
+            return groups
+        log.warning("LLM merge response failed validation – falling back")
+    except Exception:
+        log.warning("LLM merge call failed – falling back", exc_info=True)
+    return None
+
+
+def _rule_based_merge(
+    blocks: list[tuple[str, float, float, str]],
+    max_gap: float = 2.0,
+) -> list[tuple[float, float, str]]:
+    """Merge entries whose text doesn't end with sentence-ending punctuation.
+
+    This is the deterministic fallback when no LLM client is available.
+    """
+    if not blocks:
+        return []
+
+    merged: list[tuple[float, float, str]] = []
+    buf_start: float | None = None
+    buf_end: float = 0.0
+    buf_texts: list[str] = []
+
+    for _, start, end, text in blocks:
+        text = text.strip()
+
+        # Large silence gap → flush current buffer first
+        if buf_start is not None and (start - buf_end) > max_gap:
+            merged.append((buf_start, buf_end, " ".join(buf_texts)))
+            buf_start = start
+            buf_end = end
+            buf_texts = [text]
+        else:
+            if buf_start is None:
+                buf_start = start
+            buf_end = end
+            buf_texts.append(text)
+
+        # Sentence-ending punctuation → flush
+        if _SENTENCE_END_RE.search(text):
+            merged.append((buf_start, buf_end, " ".join(buf_texts)))
+            buf_start = None
+            buf_end = 0.0
+            buf_texts = []
+
+    if buf_texts and buf_start is not None:
+        merged.append((buf_start, buf_end, " ".join(buf_texts)))
+
+    return merged
+
+
+def _merge_phrases(
+    blocks: list[tuple[str, float, float, str]],
+    client: OpenAI | None,
+    llm_model: str,
+) -> list[tuple[float, float, str]]:
+    """Merge consecutive SRT blocks that belong to the same speech phrase."""
+    if not blocks:
+        return []
+
+    if client is None:
+        return _rule_based_merge(blocks)
+
+    merged: list[tuple[float, float, str]] = []
+    merge_calls = 0
+
+    for batch_start in range(0, len(blocks), _MERGE_BATCH_SIZE):
+        batch = blocks[batch_start : batch_start + _MERGE_BATCH_SIZE]
+
+        groups = _llm_merge_batch(batch, client, llm_model)
+        merge_calls += 1
+
+        if groups is None:
+            merged.extend(_rule_based_merge(batch))
+            continue
+
+        for group in groups:
+            indices = [g - 1 for g in group]
+            texts = [batch[i][3].strip() for i in indices]
+            start = batch[indices[0]][1]
+            end = batch[indices[-1]][2]
+            merged.append((start, end, " ".join(texts)))
+
+    log.info(
+        "Merge phase: %d -> %d entries (LLM merge calls: %d)",
+        len(blocks), len(merged), merge_calls,
+    )
+    return merged
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Phase 2 – Split long entries at natural boundaries
+# ═══════════════════════════════════════════════════════════════════════════════
 
 _SPLIT_SYSTEM = """\
-You are a professional subtitle editor. Split the given long subtitle text \
-into shorter, readable caption segments.
+You are a speech-aware subtitle editor. Split long text into segments \
+for text-to-speech. Each segment MUST be a complete spoken thought.
 
 RULES:
-1. Split at natural sentence or clause boundaries (periods, commas, semicolons, \
-   conjunctions like "and", "but", "so", "because", "which").
-2. Each segment should be 40-84 characters long.
-3. Never break in the middle of a word or a technical term.
-4. Preserve the EXACT original text -- do not rephrase, rewrite, add, or remove \
-   any words. Only add split points.
-5. Return a JSON array of strings.
-6. Return ONLY the JSON array -- no markdown fences, no commentary."""
+1. ONLY split at sentence-ending punctuation (. ! ?). \
+   NEVER split at commas, conjunctions, dashes, or mid-sentence.
+2. Each segment must sound natural spoken on its own — a complete idea.
+3. Segments can be up to 300 characters. Do NOT split just for length. \
+   Only split when there are genuinely separate sentences.
+4. Preserve the EXACT original text — do not rephrase or remove words.
+5. Return a JSON array of strings. No markdown fences, no commentary."""
 
 
 def _llm_split(text: str, client: OpenAI, llm_model: str = "gpt-4.1") -> list[str]:
@@ -49,8 +264,13 @@ def _llm_split(text: str, client: OpenAI, llm_model: str = "gpt-4.1") -> list[st
 
 
 def _rule_based_split(text: str, max_chars: int = MAX_CHARS) -> list[str]:
-    """Deterministic fallback: split on sentence and clause boundaries."""
-    sentences = re.split(r"(?<=[.!?])\s+", text)
+    """Deterministic fallback: split ONLY at sentence boundaries.
+
+    Keeps full sentences together. Only falls back to clause-level splitting
+    when a single sentence exceeds *max_chars*.
+    """
+    # Split at sentence-ending punctuation only
+    sentences = re.split(r'(?<=[.!?…؟])\s+', text)
     segments: list[str] = []
     current = ""
     for sent in sentences:
@@ -62,12 +282,14 @@ def _rule_based_split(text: str, max_chars: int = MAX_CHARS) -> list[str]:
     if current:
         segments.append(current.strip())
 
+    # Only break further if a single sentence is still over the limit
     final: list[str] = []
     for seg in segments:
         if len(seg) <= max_chars:
             final.append(seg)
         else:
-            parts = re.split(r"(?<=,)\s+|(?<=\u2014)\s*|\s+(?=\u2014)", seg)
+            # Last resort: split at semicolons or em-dashes
+            parts = re.split(r'(?<=[;])\s+|(?<=\u2014)\s*|\s+(?=\u2014)', seg)
             buf = ""
             for p in parts:
                 if buf and len(buf) + len(p) + 1 > max_chars:
@@ -79,6 +301,10 @@ def _rule_based_split(text: str, max_chars: int = MAX_CHARS) -> list[str]:
                 final.append(buf.strip())
     return final
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Timestamp distribution
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _distribute_timestamps(
     segments: list[str],
@@ -111,6 +337,10 @@ def _distribute_timestamps(
     return result
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Public API
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def resegment_srt(
     srt_text: str,
     *,
@@ -119,24 +349,31 @@ def resegment_srt(
     max_chars: int = MAX_CHARS,
     max_dur: float = MAX_DUR,
 ) -> str:
-    """Re-segment an SRT string into properly sized caption blocks.
+    """Re-segment an SRT string so every entry is a complete speech phrase.
 
-    When *client* is provided, long entries are split using an LLM for
-    natural-sounding boundaries.  Otherwise a deterministic rule-based
-    splitter is used.
+    **Phase 1 – Merge**: consecutive entries that are fragments of the same
+    sentence are combined (via LLM when *client* is provided, otherwise by a
+    punctuation-based heuristic).
+
+    **Phase 2 – Split**: entries that exceed *max_chars* are broken at natural
+    clause / sentence boundaries (via LLM or rule-based fallback).
 
     Returns:
         The re-segmented SRT as a string.
     """
     blocks = parse_blocks(srt_text)
+
+    # ── Phase 1: merge fragments into complete phrases ────────────────
+    merged = _merge_phrases(blocks, client, llm_model)
+
+    # ── Phase 2: split overly-long entries ────────────────────────────
     resegmented: list[tuple[float, float, str]] = []
-    llm_calls = 0
+    split_calls = 0
 
-    for _, start, end, text in blocks:
+    for start, end, text in merged:
         text = text.strip()
-        dur = end - start
 
-        if len(text) <= max_chars and dur <= max_dur:
+        if len(text) <= max_chars and (end - start) <= max_dur:
             resegmented.append((start, end, text))
             continue
 
@@ -149,7 +386,7 @@ def resegment_srt(
         if client is not None:
             try:
                 segments = _llm_split(text, client, llm_model)
-                llm_calls += 1
+                split_calls += 1
                 joined = " ".join(segments)
                 if joined.replace("  ", " ").strip() != text.replace("  ", " ").strip():
                     segments = None
@@ -164,7 +401,7 @@ def resegment_srt(
             resegmented.append((s, e, seg_text))
 
     log.info(
-        "Re-segmented %d -> %d entries (LLM calls: %d)",
-        len(blocks), len(resegmented), llm_calls,
+        "Re-segmented %d -> %d -> %d (original -> merged -> split, LLM split calls: %d)",
+        len(blocks), len(merged), len(resegmented), split_calls,
     )
     return build(resegmented)
