@@ -17,6 +17,11 @@ dependencies = [
     "soundfile>=0.12",
     "numpy>=1.24",
     "tqdm>=4.60",
+    # Transcription (WhisperX)
+    "whisperx>=3.0",
+    "torch>=2.0",
+    # TTS (Qwen)
+    "qwen-tts",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +64,7 @@ tts-chatterbox = [
 flash-attn = [
     "flash-attn>=2.0",
 ]
-# Full pipeline with Qwen TTS (transcribe-whisperx + tts work together)
+# Full pipeline with Qwen TTS — same as bare install (kept as alias)
 all-qwen = [
     "mazinger-dubber[transcribe-whisperx,tts]",
 ]

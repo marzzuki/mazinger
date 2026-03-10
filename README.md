@@ -33,17 +33,15 @@ Every stage works **independently** or chained through the `MazingerDubber` clas
 
 ## Installation
 
-Pick **one** of the bundles below based on the TTS engine you want:
+```bash
+# Default — includes Qwen TTS + WhisperX transcription (recommended)
+pip install .
+```
+
+For **Chatterbox TTS** instead of Qwen (different `transformers` version — use a separate venv):
 
 ```bash
-# Chatterbox TTS + faster-whisper (recommended for voice cloning without transcript)
 pip install ".[all-chatterbox]"
-
-# Qwen TTS + WhisperX (recommended for multilingual + best alignment)
-pip install ".[all-qwen]"
-
-# Core only (no local TTS, no local transcription — uses OpenAI APIs)
-pip install .
 ```
 
 > **Qwen and Chatterbox cannot coexist** in the same environment (conflicting `transformers` versions).
