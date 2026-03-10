@@ -154,7 +154,7 @@ No. They require different `transformers` versions. Use separate virtual environ
 `openai` (cloud) and `faster-whisper` (local). WhisperX has a dependency conflict with Chatterbox.
 
 **Where do the output files go?**
-Under `<base-dir>/projects/<slug>/` — organised into `source/`, `transcription/`, `subtitles/`, `thumbnails/`, `analysis/`, and `tts/` folders.
+Under `<base-dir>/projects/<slug>/` (default: `./mazinger_dubber_output/projects/<slug>/`) — organised into `source/`, `transcription/`, `subtitles/`, `thumbnails/`, `analysis/`, and `tts/` folders.
 
 **How do I pass YouTube cookies for age-restricted videos?**
 Use `--cookies-from-browser chrome` or `--cookies path/to/cookies.txt` with any command.

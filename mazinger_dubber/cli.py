@@ -7,10 +7,13 @@ import logging
 import sys
 
 
+DEFAULT_BASE_DIR = "./mazinger_dubber_output"
+
+
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--base-dir", default=".",
-        help="Root directory for project folders (default: current directory).",
+        "--base-dir", default=DEFAULT_BASE_DIR,
+        help=f"Root directory for project folders (default: {DEFAULT_BASE_DIR}).",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true",

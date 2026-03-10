@@ -31,7 +31,7 @@ class MazingerDubber:
         openai_api_key: str | None = None,
         openai_base_url: str | None = None,
         llm_model: str | None = None,
-        base_dir: str = ".",
+        base_dir: str = "./mazinger_dubber_output",
     ) -> None:
         self.llm_model = llm_model or os.environ.get("OPENAI_MODEL") or "gpt-4.1"
         self.base_dir = base_dir
