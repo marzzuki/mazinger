@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import json_repair
 
-from mazinger_dubber.utils import make_image_content, LLMUsageTracker
+from mazinger.utils import make_image_content, LLMUsageTracker
 
 if TYPE_CHECKING:
     from openai import OpenAI

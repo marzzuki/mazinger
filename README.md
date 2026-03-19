@@ -19,7 +19,7 @@ Download a video, transcribe it, translate the subtitles, and generate a voice-c
 | **Assemble**   | Time-aligned final audio matching original duration   |
 | **LLM Usage**  | Per-stage token tracking with summary report          |
 
-Every stage works **independently** or chained through the `MazingerDubber` class / `mazinger-dubber` CLI.
+Every stage works **independently** or chained through the `MazingerDubber` class / `mazinger` CLI.
 
 ---
 
@@ -28,25 +28,60 @@ Every stage works **independently** or chained through the `MazingerDubber` clas
 - **Python 3.10+**
 - **ffmpeg** — `apt install ffmpeg` or `brew install ffmpeg`
 - **OpenAI API key** — set `OPENAI_API_KEY` env var (or pass via `--openai-api-key`)
-- **CUDA GPU** — needed for local transcription and TTS (optional if using OpenAI transcription only)
+- **CUDA GPU** — only needed for local transcription (`faster-whisper`, `whisperx`) and TTS (`speak`/`dub`)
 
 ---
 
 ## Installation
 
+The base install is lightweight — it includes **download**, **thumbnails**, **describe**, **translate**, and **resegment** (all OpenAI-based). Local transcription and TTS engines are optional extras.
+
 ```bash
-# Default — includes Qwen TTS + WhisperX transcription (recommended)
+# Core only (OpenAI transcription + LLM tasks, no GPU needed)
 pip install .
 ```
 
-For **Chatterbox TTS** instead of Qwen (different `transformers` version — use a separate venv):
+### Add local transcription
 
 ```bash
-pip install ".[all-chatterbox]"
+pip install ".[transcribe-faster]"    # faster-whisper — fast, Chatterbox-compatible
+pip install ".[transcribe-whisperx]"  # WhisperX — best word-level alignment (Qwen-compatible)
+```
+
+### Add TTS
+
+```bash
+pip install ".[tts]"                  # Qwen3-TTS (needs voice sample + transcript)
+pip install ".[tts-chatterbox]"       # Chatterbox (voice sample only, emotion control)
+```
+
+### Full bundles
+
+```bash
+pip install ".[all-qwen]"            # WhisperX + Qwen TTS
+pip install ".[all-chatterbox]"      # faster-whisper + Chatterbox TTS
 ```
 
 > **Qwen and Chatterbox cannot coexist** in the same environment (conflicting `transformers` versions).
-> See [DOCS.md](DOCS.md#installation-options) for advanced install methods (venv, Colab, extras).
+> **WhisperX conflicts with Chatterbox** — use `faster-whisper` or OpenAI transcription with Chatterbox.
+> See [DOCS.md](DOCS.md#installation-options) for advanced install methods (venv, Colab, uv overrides).
+
+### What each task requires
+
+| Task            | Command               | Core install | Extra needed                                   |
+|-----------------|------------------------|:------------:|-------------------------------------------------|
+| Download        | `mazinger download`    | ✅           | —                                               |
+| Transcribe (cloud) | `mazinger transcribe` | ✅        | — (uses OpenAI API)                             |
+| Transcribe (local) | `mazinger transcribe --method faster-whisper` | — | `transcribe-faster` (+ CUDA GPU) |
+| Transcribe (local) | `mazinger transcribe --method whisperx` | — | `transcribe-whisperx` (+ CUDA GPU) |
+| Thumbnails      | `mazinger thumbnails`  | ✅           | —                                               |
+| Describe        | `mazinger describe`    | ✅           | —                                               |
+| Translate       | `mazinger translate`   | ✅           | —                                               |
+| Re-segment      | `mazinger resegment`   | ✅           | —                                               |
+| Speak (Qwen)    | `mazinger speak`       | —            | `tts` (+ CUDA GPU)                             |
+| Speak (Chatterbox) | `mazinger speak --tts-engine chatterbox` | — | `tts-chatterbox` (+ CUDA GPU) |
+| Full dub (Qwen) | `mazinger dub`         | —            | `all-qwen` (+ CUDA GPU)                        |
+| Full dub (Chatterbox) | `mazinger dub --tts-engine chatterbox` | — | `all-chatterbox` (+ CUDA GPU) |
 
 ---
 
@@ -55,7 +90,7 @@ pip install ".[all-chatterbox]"
 ### One command — dub a video
 
 ```bash
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --voice-sample reference.m4a \
     --voice-script reference_transcript.txt \
     --base-dir ./output
@@ -70,19 +105,19 @@ By default, every stage caches its outputs. If a run is interrupted (e.g. during
 To **discard all cached outputs** and start from scratch, add `--force-reset`:
 
 ```bash
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr \
     --force-reset
 ```
 
-`--force-reset` also works with the standalone `tts` sub-command.
+`--force-reset` also works with the standalone `speak` sub-command.
 
 ### Using a voice profile
 
 Instead of providing `--voice-sample` and `--voice-script` manually, use a named profile from the [voice profiles dataset](https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles):
 
 ```bash
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr \
     --base-dir ./output
 ```
@@ -90,7 +125,7 @@ mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
 To produce a dubbed **video** (replaces audio track in the source video):
 
 ```bash
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr \
     --output-type video
 ```
@@ -99,16 +134,16 @@ The voice sample and script are downloaded automatically (no auth required). You
 
 ```bash
 # Local video with a profile
-mazinger-dubber dub ./my_video.mp4 --clone-profile abubakr
+mazinger dub ./my_video.mp4 --clone-profile abubakr
 
 # Local audio with a profile
-mazinger-dubber dub ./my_audio.mp3 --clone-profile abubakr
+mazinger dub ./my_audio.mp3 --clone-profile abubakr
 ```
 
 ### Python
 
 ```python
-from mazinger_dubber import MazingerDubber
+from mazinger import MazingerDubber
 
 dubber = MazingerDubber(openai_api_key="sk-...", base_dir="./output")
 
@@ -120,7 +155,7 @@ proj = dubber.dub(
 )
 
 # Or resolve a profile first
-from mazinger_dubber.profiles import fetch_profile
+from mazinger.profiles import fetch_profile
 voice, script = fetch_profile("abubakr")
 proj = dubber.dub(
     source="https://youtube.com/watch?v=VIDEO_ID",
@@ -136,13 +171,13 @@ print(proj.final_audio)  # ./output/projects/<slug>/tts/dubbed.wav
 Each pipeline stage has its own sub-command:
 
 ```bash
-mazinger-dubber download   ...
-mazinger-dubber transcribe ...
-mazinger-dubber thumbnails ...
-mazinger-dubber describe   ...
-mazinger-dubber translate  ...
-mazinger-dubber resegment  ...
-mazinger-dubber tts        ...
+mazinger download   ...
+mazinger transcribe ...
+mazinger thumbnails ...
+mazinger describe   ...
+mazinger translate  ...
+mazinger resegment  ...
+mazinger speak      ...
 ```
 
 Run any command with `--help` for all options. Full step-by-step guide in [DOCS.md](DOCS.md#step-by-step-usage).
@@ -177,7 +212,7 @@ No. They require different `transformers` versions. Use separate virtual environ
 `openai` (cloud) and `faster-whisper` (local). WhisperX has a dependency conflict with Chatterbox.
 
 **Where do the output files go?**
-Under `<base-dir>/projects/<slug>/` (default: `./mazinger_dubber_output/projects/<slug>/`) — organised into `source/`, `transcription/`, `subtitles/`, `thumbnails/`, `analysis/`, and `tts/` folders.
+Under `<base-dir>/projects/<slug>/` (default: `./mazinger_output/projects/<slug>/`) — organised into `source/`, `transcription/`, `subtitles/`, `thumbnails/`, `analysis/`, and `tts/` folders.
 
 **My run was interrupted — do I have to start over?**
 No. Re-run the same command and all completed stages (including individual TTS segments) are skipped automatically. Use `--force-reset` only if you want to regenerate everything from scratch.

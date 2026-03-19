@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 import json_repair
 
-from mazinger_dubber.srt import parse_blocks, build
-from mazinger_dubber.utils import LLMUsageTracker
+from mazinger.srt import parse_blocks, build
+from mazinger.utils import LLMUsageTracker
 
 if TYPE_CHECKING:
     from openai import OpenAI

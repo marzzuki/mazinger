@@ -1,4 +1,4 @@
-"""Allow ``python -m mazinger_dubber`` invocation."""
+"""Allow ``python -m mazinger`` invocation."""
 
 import os
 import warnings
@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore", message=".*Lightning automatically upgraded.*"
 import logging
 logging.getLogger("lightning.pytorch.utilities.migration").setLevel(logging.WARNING)
 
-from mazinger_dubber.cli import main
+from mazinger.cli import main
 
 if __name__ == "__main__":
     main()

@@ -80,7 +80,7 @@ def assemble_timeline(
     timeline matching *original_duration*.
 
     Parameters:
-        segment_info:      List of dicts from :func:`mazinger_dubber.tts.synthesize_segments`.
+        segment_info:      List of dicts from :func:`mazinger.tts.synthesize_segments`.
         original_duration: Duration of the original audio in seconds.
         output_path:       Where to write the final WAV.
         sample_rate:       Target sample rate.

@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 import json_repair
 from PIL import Image
 
-from mazinger_dubber.srt import parse_blocks, blocks_to_text
-from mazinger_dubber.utils import estimate_tokens, LLMUsageTracker
+from mazinger.srt import parse_blocks, blocks_to_text
+from mazinger.utils import estimate_tokens, LLMUsageTracker
 
 if TYPE_CHECKING:
     from openai import OpenAI

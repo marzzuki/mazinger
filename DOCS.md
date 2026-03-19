@@ -32,11 +32,13 @@ Detailed reference for installation options, pipeline stages, CLI commands, Pyth
 
 ### Core only
 
-Includes download, OpenAI transcription, translate, resegment, describe, and thumbnails:
+The base install is lightweight — download, OpenAI transcription, thumbnails, describe, translate, and resegment. No GPU required.
 
 ```bash
 pip install .
 ```
+
+Core dependencies: `yt-dlp`, `openai`, `json-repair`, `Pillow`, `soundfile`, `numpy`, `tqdm`.
 
 ### Selective extras
 
@@ -57,6 +59,23 @@ pip install ".[all-chatterbox]"  # faster-whisper + Chatterbox TTS
 > **Qwen TTS and Chatterbox TTS cannot coexist** in the same environment due to conflicting `transformers` versions. Pick one per venv.
 >
 > **WhisperX conflicts with Chatterbox** (`transformers>=4.48` vs `==4.46.3`). Use `faster-whisper` or OpenAI transcription with Chatterbox.
+
+### What each task requires
+
+| Task            | Command               | Core install | Extra needed                                   |
+|-----------------|------------------------|:------------:|-------------------------------------------------|
+| Download        | `mazinger download`    | ✅           | —                                               |
+| Transcribe (cloud) | `mazinger transcribe` | ✅        | — (uses OpenAI API)                             |
+| Transcribe (local) | `mazinger transcribe --method faster-whisper` | — | `transcribe-faster` (+ CUDA GPU) |
+| Transcribe (local) | `mazinger transcribe --method whisperx` | — | `transcribe-whisperx` (+ CUDA GPU) |
+| Thumbnails      | `mazinger thumbnails`  | ✅           | —                                               |
+| Describe        | `mazinger describe`    | ✅           | —                                               |
+| Translate       | `mazinger translate`   | ✅           | —                                               |
+| Re-segment      | `mazinger resegment`   | ✅           | —                                               |
+| Speak (Qwen)    | `mazinger speak`       | —            | `tts` (+ CUDA GPU)                             |
+| Speak (Chatterbox) | `mazinger speak --tts-engine chatterbox` | — | `tts-chatterbox` (+ CUDA GPU) |
+| Full dub (Qwen) | `mazinger dub`         | —            | `all-qwen` (+ CUDA GPU)                        |
+| Full dub (Chatterbox) | `mazinger dub --tts-engine chatterbox` | — | `all-chatterbox` (+ CUDA GPU) |
 
 ---
 
@@ -201,21 +220,21 @@ Voice profiles provide a convenient way to clone a speaker's voice without speci
 
 ```bash
 # Full pipeline with a profile
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" --clone-profile abubakr
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" --clone-profile abubakr
 
-# TTS sub-command with a profile
-mazinger-dubber tts --srt translated.srt --original-audio audio.mp3 \
+# Speak sub-command with a profile
+mazinger speak --srt translated.srt --original-audio audio.mp3 \
     --clone-profile abubakr -o dubbed.wav
 
 # Profile + override (use profile voice but custom script)
-mazinger-dubber dub "https://youtube.com/watch?v=VIDEO_ID" \
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr --voice-script my_custom_script.txt
 ```
 
 ### Python API
 
 ```python
-from mazinger_dubber.profiles import fetch_profile
+from mazinger.profiles import fetch_profile
 
 # Downloads voice sample + script, converts audio to 16kHz mono WAV
 voice_path, script_path = fetch_profile("abubakr")
@@ -268,11 +287,11 @@ Each stage has a CLI sub-command **and** a matching Python function.
 ### 1. Download
 
 ```bash
-mazinger-dubber download "https://youtube.com/watch?v=VIDEO_ID" --base-dir ./output
+mazinger download "https://youtube.com/watch?v=VIDEO_ID" --base-dir ./output
 ```
 
 ```python
-from mazinger_dubber.download import resolve_slug, download_video, extract_audio
+from mazinger.download import resolve_slug, download_video, extract_audio
 
 slug, info = resolve_slug("https://youtube.com/watch?v=VIDEO_ID")
 download_video("https://youtube.com/watch?v=VIDEO_ID", "video.mp4")
@@ -283,17 +302,17 @@ extract_audio("video.mp4", "audio.mp3")
 
 ```bash
 # OpenAI Whisper API (default)
-mazinger-dubber transcribe audio.mp3 -o subtitles.srt
+mazinger transcribe audio.mp3 -o subtitles.srt
 
 # faster-whisper (local, Chatterbox compatible)
-mazinger-dubber transcribe audio.mp3 -o subtitles.srt --method faster-whisper --device cuda
+mazinger transcribe audio.mp3 -o subtitles.srt --method faster-whisper --device cuda
 
 # WhisperX (local, best alignment)
-mazinger-dubber transcribe audio.mp3 -o subtitles.srt --method whisperx --device cuda
+mazinger transcribe audio.mp3 -o subtitles.srt --method whisperx --device cuda
 ```
 
 ```python
-from mazinger_dubber.transcribe import transcribe
+from mazinger.transcribe import transcribe
 
 transcribe("audio.mp3", "subtitles.srt")                                          # OpenAI
 transcribe("audio.mp3", "subtitles.srt", method="faster-whisper", device="cuda")  # faster-whisper
@@ -303,7 +322,7 @@ transcribe("audio.mp3", "subtitles.srt", method="whisperx", device="cuda")      
 ### 3. Extract Thumbnails
 
 ```bash
-mazinger-dubber thumbnails \
+mazinger thumbnails \
     --video video.mp4 \
     --srt subtitles.srt \
     --output-dir ./thumbs
@@ -311,7 +330,7 @@ mazinger-dubber thumbnails \
 
 ```python
 from openai import OpenAI
-from mazinger_dubber.thumbnails import select_timestamps, extract_frames
+from mazinger.thumbnails import select_timestamps, extract_frames
 
 client = OpenAI()
 with open("subtitles.srt") as f:
@@ -324,15 +343,15 @@ frames = extract_frames("video.mp4", timestamps, "./thumbs")
 ### 4. Describe Content
 
 ```bash
-mazinger-dubber describe \
+mazinger describe \
     --srt subtitles.srt \
     --thumbnails-meta ./thumbs/meta.json \
     -o description.json
 ```
 
 ```python
-from mazinger_dubber.describe import describe_content
-from mazinger_dubber.utils import load_json
+from mazinger.describe import describe_content
+from mazinger.utils import load_json
 
 thumb_paths = load_json("./thumbs/meta.json")
 desc = describe_content(srt_text, thumb_paths, client)
@@ -341,7 +360,7 @@ desc = describe_content(srt_text, thumb_paths, client)
 ### 5. Translate
 
 ```bash
-mazinger-dubber translate \
+mazinger translate \
     --srt subtitles.srt \
     --description description.json \
     --thumbnails-meta ./thumbs/meta.json \
@@ -349,7 +368,7 @@ mazinger-dubber translate \
 ```
 
 ```python
-from mazinger_dubber.translate import translate_srt
+from mazinger.translate import translate_srt
 
 translated = translate_srt(srt_text, desc, thumb_paths, client)
 with open("translated.srt", "w") as f:
@@ -359,11 +378,11 @@ with open("translated.srt", "w") as f:
 ### 6. Re-segment
 
 ```bash
-mazinger-dubber resegment --srt translated.srt -o final.srt
+mazinger resegment --srt translated.srt -o final.srt
 ```
 
 ```python
-from mazinger_dubber.resegment import resegment_srt
+from mazinger.resegment import resegment_srt
 
 final_srt = resegment_srt(translated, client=client)
 ```
@@ -372,7 +391,7 @@ final_srt = resegment_srt(translated, client=client)
 
 ```bash
 # Qwen (default, no tempo adjustment)
-mazinger-dubber tts \
+mazinger speak \
     --srt translated.srt \
     --original-audio audio.mp3 \
     --voice-sample reference.m4a \
@@ -380,14 +399,14 @@ mazinger-dubber tts \
     -o dubbed.wav
 
 # Using a voice profile instead of explicit files
-mazinger-dubber tts \
+mazinger speak \
     --srt translated.srt \
     --original-audio audio.mp3 \
     --clone-profile abubakr \
     -o dubbed.wav
 
 # Chatterbox
-mazinger-dubber tts \
+mazinger speak \
     --srt translated.srt \
     --original-audio audio.mp3 \
     --voice-sample reference.m4a \
@@ -396,7 +415,7 @@ mazinger-dubber tts \
     -o dubbed.wav
 
 # With fixed tempo (speed up all segments by 1.1×)
-mazinger-dubber tts \
+mazinger speak \
     --srt translated.srt \
     --original-audio audio.mp3 \
     --voice-sample reference.m4a \
@@ -405,7 +424,7 @@ mazinger-dubber tts \
     -o dubbed.wav
 
 # With dynamic tempo (per-segment, max 1.3×)
-mazinger-dubber tts \
+mazinger speak \
     --srt translated.srt \
     --original-audio audio.mp3 \
     --voice-sample reference.m4a \
@@ -415,9 +434,9 @@ mazinger-dubber tts \
 ```
 
 ```python
-from mazinger_dubber import tts, assemble
-from mazinger_dubber.srt import parse_file
-from mazinger_dubber.utils import get_audio_duration
+from mazinger import tts, assemble
+from mazinger.srt import parse_file
+from mazinger.utils import get_audio_duration
 
 model = tts.load_model(engine="qwen")
 prompt = tts.create_voice_prompt(model, "reference.m4a", ref_text, engine="qwen")
@@ -491,7 +510,7 @@ By default, every pipeline stage and individual TTS segment is cached. If a run 
 | *(default)* | Skip stages/segments whose output files already exist |
 | `--force-reset` | Discard all cached outputs and re-run every stage from scratch |
 
-`--force-reset` works with both the `dub` and `tts` sub-commands.
+`--force-reset` works with both the `dub` and `speak` sub-commands.
 
 ### LLM Usage Tracking
 
@@ -513,7 +532,7 @@ The raw records are also saved to `<project>/llm_usage.json` for programmatic ac
 To use the tracker in Python outside the pipeline:
 
 ```python
-from mazinger_dubber.utils import LLMUsageTracker
+from mazinger.utils import LLMUsageTracker
 
 tracker = LLMUsageTracker()
 # Pass tracker to any LLM-calling function:
@@ -539,10 +558,20 @@ By default, dubbed segments are placed at their original timestamps with no spee
 ## Package Layout
 
 ```
-mazinger_dubber/
+mazinger/
 ├── __init__.py      # public API surface
-├── __main__.py      # python -m mazinger_dubber
-├── cli.py           # argparse CLI
+├── __main__.py      # python -m mazinger
+├── cli/             # CLI package
+│   ├── __init__.py  # parser + main entry point
+│   ├── _groups.py   # shared argument groups (DRY)
+│   ├── _dub.py      # dub command
+│   ├── _download.py # download command
+│   ├── _transcribe.py
+│   ├── _thumbnails.py
+│   ├── _describe.py
+│   ├── _translate.py
+│   ├── _resegment.py
+│   └── _speak.py    # speak command (voice synthesis)
 ├── pipeline.py      # MazingerDubber orchestrator class
 ├── paths.py         # ProjectPaths
 ├── download.py      # yt-dlp + ffmpeg

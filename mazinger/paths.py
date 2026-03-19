@@ -18,7 +18,7 @@ class ProjectPaths:
         tts/             synthesised audio segments + final output
     """
 
-    def __init__(self, slug: str, base_dir: str = "./mazinger_dubber_output") -> None:
+    def __init__(self, slug: str, base_dir: str = "./mazinger_output") -> None:
         self.slug = slug
         self.base_dir = base_dir
         self.root = os.path.join(base_dir, "projects", slug)

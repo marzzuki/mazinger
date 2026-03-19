@@ -6,9 +6,9 @@ Each stage can be used independently or chained through the unified
 ``MazingerDubber`` pipeline class.
 """
 
-from mazinger_dubber.pipeline import MazingerDubber
-from mazinger_dubber.paths import ProjectPaths
-from mazinger_dubber.utils import LLMUsageTracker
+from mazinger.pipeline import MazingerDubber
+from mazinger.paths import ProjectPaths
+from mazinger.utils import LLMUsageTracker
 
 __all__ = ["MazingerDubber", "ProjectPaths", "LLMUsageTracker"]
-__version__ = "0.1.0"
+__version__ = "1.1.0"

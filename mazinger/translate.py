@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from tqdm.auto import tqdm
 
-from mazinger_dubber.srt import parse_blocks, blocks_to_text, format_time
-from mazinger_dubber.utils import make_image_content, LLMUsageTracker
+from mazinger.srt import parse_blocks, blocks_to_text, format_time
+from mazinger.utils import make_image_content, LLMUsageTracker
 
 if TYPE_CHECKING:
     from openai import OpenAI

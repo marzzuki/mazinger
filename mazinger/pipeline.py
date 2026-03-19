@@ -6,8 +6,8 @@ import logging
 import os
 from typing import Any
 
-from mazinger_dubber.paths import ProjectPaths
-from mazinger_dubber.utils import save_json, load_json, get_audio_duration, LLMUsageTracker
+from mazinger.paths import ProjectPaths
+from mazinger.utils import save_json, load_json, get_audio_duration, LLMUsageTracker
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class MazingerDubber:
     """Orchestrates the full dubbing pipeline.
 
     Each step can also be called individually through the underlying modules
-    (``mazinger_dubber.download``, ``mazinger_dubber.transcribe``, etc.).  This class
+    (``mazinger.download``, ``mazinger.transcribe``, etc.).  This class
     provides a convenient wrapper that chains them together with sensible
     defaults and shared state.
 
@@ -31,7 +31,7 @@ class MazingerDubber:
         openai_api_key: str | None = None,
         openai_base_url: str | None = None,
         llm_model: str | None = None,
-        base_dir: str = "./mazinger_dubber_output",
+        base_dir: str = "./mazinger_output",
     ) -> None:
         self.llm_model = llm_model or os.environ.get("OPENAI_MODEL") or "gpt-4.1"
         self.base_dir = base_dir
@@ -123,9 +123,9 @@ class MazingerDubber:
         Returns:
             The :class:`ProjectPaths` instance with all output paths populated.
         """
-        from mazinger_dubber import download, transcribe, thumbnails, describe
-        from mazinger_dubber import translate, resegment, tts, assemble
-        from mazinger_dubber.srt import parse_file
+        from mazinger import download, transcribe, thumbnails, describe
+        from mazinger import translate, resegment, tts, assemble
+        from mazinger.srt import parse_file
 
         # -- Resolve project paths ----------------------------------------
         is_remote = download.is_url(source)

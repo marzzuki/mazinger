@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import yt_dlp
 
-from mazinger_dubber.utils import sanitize_filename
+from mazinger.utils import sanitize_filename
 
 log = logging.getLogger(__name__)
 
