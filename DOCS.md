@@ -551,6 +551,7 @@ burn_subtitles("video.mp4", "output.mp4", "translated.srt", style, audio_path="d
 | `--subtitle-position`      | bottom    | `top`, `center`, or `bottom`               |
 | `--subtitle-margin`        | 20        | Vertical margin from edge (pixels)         |
 | `--subtitle-bold`          | off       | Bold text                                  |
+| `--subtitle-line-spacing`  | 8         | Extra vertical spacing between lines (px)  |
 
 ---
 

@@ -14,9 +14,6 @@ log = logging.getLogger(__name__)
 
 _POSITIONS = {"bottom": 2, "top": 8, "center": 5}
 
-# Right-aligned equivalents for RTL text (ASS numpad layout).
-_RTL_POSITIONS = {"bottom": 3, "top": 9, "center": 6}
-
 # Unicode ranges for Arabic, Arabic Supplement, Arabic Extended,
 # Arabic Presentation Forms A/B, and Farsi-specific characters.
 _RTL_RE = re.compile(
@@ -79,18 +76,18 @@ def _starts_rtl(text: str) -> bool:
 
 
 def _prepare_rtl_srt(srt_path: str, position: str) -> str | None:
-    """Return the path to a temp SRT with per-entry RTL overrides, or ``None``.
+    """Return the path to a temp SRT with per-entry RTL markers, or ``None``.
 
     Scans every subtitle entry.  If *any* entry begins with an RTL character
-    its text is wrapped with Unicode RLE marks and an ASS alignment override
-    tag (``{\\an<N>}``) that right-aligns it.
+    its text lines are wrapped with Unicode RLE/PDF directional markers so
+    the text renders right-to-left while keeping the same centered alignment
+    as LTR entries.
 
     Returns ``None`` when no RTL entries are found (no temp file created).
     """
     with open(srt_path, encoding="utf-8") as fh:
         content = fh.read()
 
-    rtl_alignment = _RTL_POSITIONS.get(position, 3)
     blocks = re.split(r"\n\n+", content.strip())
     changed = False
     new_blocks: list[str] = []
@@ -103,9 +100,9 @@ def _prepare_rtl_srt(srt_path: str, position: str) -> str | None:
             first_text = "".join(text_lines).strip()
             if _starts_rtl(first_text):
                 changed = True
-                # Inject ASS override for right-alignment + wrap with RLE/PDF.
-                tag = f"{{\\an{rtl_alignment}}}"
-                lines[2] = tag + _RLE + lines[2]
+                # Wrap text lines with Unicode RLE/PDF for RTL rendering.
+                # No ASS alignment override — keep the global centered position.
+                lines[2] = _RLE + lines[2]
                 lines[-1] = lines[-1] + _PDF
         new_blocks.append("\n".join(lines))
 
@@ -119,6 +116,50 @@ def _prepare_rtl_srt(srt_path: str, position: str) -> str | None:
     tmp.close()
     log.info("Prepared RTL-aware SRT: %s", tmp.name)
     return tmp.name
+
+
+def _prepare_line_spacing(srt_path: str, spacing: int) -> str | None:
+    """Return a temp SRT with extra vertical padding between wrapped lines.
+
+    libass has no native line-spacing style property.  This inserts a tiny
+    transparent line (``{\\fs<N>\\alpha&HFF&} ``) between text lines in each
+    subtitle block, which acts as a vertical spacer.
+
+    Returns ``None`` when *spacing* is 0 (no temp file created).
+    """
+    if spacing <= 0:
+        return None
+
+    with open(srt_path, encoding="utf-8") as fh:
+        content = fh.read()
+
+    # Invisible spacer line: tiny font, fully transparent, single space.
+    spacer = f"{{\\fs{spacing}\\alpha&HFF&}} "
+
+    blocks = re.split(r"\n\n+", content.strip())
+    new_blocks: list[str] = []
+
+    for block in blocks:
+        lines = block.split("\n")
+        if len(lines) >= 3:
+            # Insert spacer between every pair of text lines.
+            text_lines = lines[2:]
+            if len(text_lines) > 1:
+                spaced: list[str] = [text_lines[0]]
+                for tl in text_lines[1:]:
+                    spaced.append(spacer)
+                    spaced.append(tl)
+                lines = lines[:2] + spaced
+        new_blocks.append("\n".join(lines))
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".srt", encoding="utf-8", delete=False,
+    )
+    tmp.write("\n\n".join(new_blocks) + "\n")
+    tmp.close()
+    log.info("Prepared line-spaced SRT (spacing=%d): %s", spacing, tmp.name)
+    return tmp.name
+
 
 @dataclass
 class SubtitleStyle:
@@ -134,6 +175,7 @@ class SubtitleStyle:
     position: str = "bottom"
     margin_v: int = 20
     bold: bool = False
+    line_spacing: int = 8
 
     def to_force_style(self) -> str:
         """Build an ASS ``force_style`` string for the ffmpeg ``subtitles`` filter."""
@@ -190,6 +232,15 @@ def burn_subtitles(
     rtl_srt = _prepare_rtl_srt(srt_path, style.position)
     effective_srt = rtl_srt or srt_path
 
+    # Preprocess SRT for line spacing when needed.
+    spaced_srt = _prepare_line_spacing(effective_srt, style.line_spacing)
+    if spaced_srt and spaced_srt != rtl_srt:
+        # We have a new temp file; clean up the intermediate RTL temp.
+        cleanup_paths = [p for p in (rtl_srt, spaced_srt) if p]
+    else:
+        cleanup_paths = [p for p in (rtl_srt,) if p]
+    effective_srt = spaced_srt or effective_srt
+
     escaped = _escape_filter_path(effective_srt)
     vf = f"subtitles='{escaped}':force_style='{style.to_force_style()}'"
 
@@ -209,8 +260,11 @@ def burn_subtitles(
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     finally:
-        if rtl_srt:
-            os.unlink(rtl_srt)
+        for p in cleanup_paths:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
 
     log.info("Subtitled video saved: %s", output_path)
     return output_path

@@ -266,6 +266,8 @@ def add_subtitle_style(p: argparse.ArgumentParser) -> None:
                    help="Subtitle vertical margin in pixels (default: 20).")
     g.add_argument("--subtitle-bold", action="store_true",
                    help="Use bold subtitle text.")
+    g.add_argument("--subtitle-line-spacing", type=int, default=8,
+                   help="Extra vertical spacing between subtitle lines in pixels (default: 8).")
 
 
 def add_subtitles(p: argparse.ArgumentParser) -> None:
@@ -291,4 +293,5 @@ def subtitle_style_from_args(args: argparse.Namespace):
         position=args.subtitle_position,
         margin_v=args.subtitle_margin,
         bold=args.subtitle_bold,
+        line_spacing=args.subtitle_line_spacing,
     )
