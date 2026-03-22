@@ -1,255 +1,138 @@
 # Mazinger Dubber
 
-End-to-end video dubbing pipeline.
-Download a video, transcribe it, translate the subtitles, and generate a voice-cloned dubbed audio track — all in one command.
+End-to-end video dubbing pipeline. Download a video, transcribe it, translate the subtitles, clone a voice, and produce a fully dubbed audio or video file — in one command.
 
----
+## What It Does
 
-## Features
+Mazinger chains nine stages into a single pipeline:
 
-| Stage          | What it does                                          |
-|----------------|-------------------------------------------------------|
-| **Download**   | Fetch video + extract audio (yt-dlp)                  |
-| **Transcribe** | Speech-to-text (OpenAI API / faster-whisper / WhisperX) |
-| **Thumbnails** | LLM-selected key frames for visual context            |
-| **Describe**   | Structured content analysis (title, summary, keywords)|
-| **Translate**  | Context-aware SRT translation with visual grounding   |
-| **Re-segment** | Split long subtitles into readable caption blocks     |
-| **TTS**        | Voice-cloned speech (Qwen3-TTS or Chatterbox)         |
-| **Assemble**   | Time-aligned final audio matching original duration   |
-| **Subtitles**  | Embed styled subtitles into the video (ffmpeg)        |
-| **LLM Usage**  | Per-stage token tracking with summary report          |
+1. **Download** — fetch a video from a URL or ingest a local file, extract the audio track
+2. **Transcribe** — convert speech to SRT subtitles (OpenAI Whisper API, faster-whisper, or WhisperX)
+3. **Thumbnails** — use an LLM to pick key frames from the video for visual context
+4. **Describe** — analyze the transcript and thumbnails to produce a structured summary (title, key points, keywords)
+5. **Translate** — translate the SRT into another language with duration-aware word budgets
+6. **Re-segment** — merge fragments and split oversized subtitles for readability
+7. **Speak** — synthesize voice-cloned speech for every subtitle entry (Qwen3-TTS or Chatterbox)
+8. **Assemble** — place each audio segment on the original timeline with optional tempo adjustment
+9. **Subtitle** — burn styled subtitles into the video and/or mux the new audio track
 
-Every stage works **independently** or chained through the `MazingerDubber` class / `mazinger` CLI.
-
----
+Every stage can run independently or as part of the full pipeline. Interrupted runs resume automatically — completed stages and individual TTS segments are cached and skipped.
 
 ## Prerequisites
 
-- **Python 3.10+**
-- **ffmpeg** — `apt install ffmpeg` or `brew install ffmpeg`
-- **OpenAI API key** — set `OPENAI_API_KEY` env var (or pass via `--openai-api-key`)
-- **CUDA GPU** — only needed for local transcription (`faster-whisper`, `whisperx`) and TTS (`speak`/`dub`)
-
----
+- Python 3.10 or later
+- ffmpeg installed and on `PATH` (`apt install ffmpeg` / `brew install ffmpeg`)
+- An OpenAI API key for LLM-powered stages (transcription, translation, thumbnails, description)
+- A CUDA GPU for local transcription and TTS (not needed for cloud-only workflows)
 
 ## Installation
 
-The base install is lightweight — it includes **download**, **thumbnails**, **describe**, **translate**, and **resegment** (all OpenAI-based). Local transcription and TTS engines are optional extras.
+The base install covers download, transcription (cloud), thumbnails, description, translation, re-segmentation, and subtitle embedding. No GPU needed.
 
 ```bash
-# Core only (OpenAI transcription + LLM tasks, no GPU needed)
 pip install .
 ```
 
-### Add local transcription
+Add local transcription or TTS as optional extras:
 
 ```bash
-pip install ".[transcribe-faster]"    # faster-whisper — fast, Chatterbox-compatible
-pip install ".[transcribe-whisperx]"  # WhisperX — best word-level alignment (Qwen-compatible)
+# Local transcription
+pip install ".[transcribe-faster]"      # faster-whisper (Chatterbox-compatible)
+pip install ".[transcribe-whisperx]"    # WhisperX (best word-level alignment)
+
+# Voice synthesis
+pip install ".[tts]"                    # Qwen3-TTS (voice sample + transcript)
+pip install ".[tts-chatterbox]"         # Chatterbox (voice sample only, emotion control)
+
+# Full bundles
+pip install ".[all-qwen]"              # WhisperX + Qwen3-TTS
+pip install ".[all-chatterbox]"        # faster-whisper + Chatterbox
 ```
 
-### Add TTS
+> Qwen and Chatterbox require different `transformers` versions and cannot share an environment.
+> WhisperX also conflicts with Chatterbox — pair it with Qwen, or use faster-whisper with Chatterbox.
 
-```bash
-pip install ".[tts]"                  # Qwen3-TTS (needs voice sample + transcript)
-pip install ".[tts-chatterbox]"       # Chatterbox (voice sample only, emotion control)
-```
-
-### Full bundles
-
-```bash
-pip install ".[all-qwen]"            # WhisperX + Qwen TTS
-pip install ".[all-chatterbox]"      # faster-whisper + Chatterbox TTS
-```
-
-> **Qwen and Chatterbox cannot coexist** in the same environment (conflicting `transformers` versions).
-> **WhisperX conflicts with Chatterbox** — use `faster-whisper` or OpenAI transcription with Chatterbox.
-> See [DOCS.md](DOCS.md#installation-options) for advanced install methods (venv, Colab, uv overrides).
-
-### What each task requires
-
-| Task            | Command               | Core install | Extra needed                                   |
-|-----------------|------------------------|:------------:|-------------------------------------------------|
-| Download        | `mazinger download`    | ✅           | —                                               |
-| Transcribe (cloud) | `mazinger transcribe` | ✅        | — (uses OpenAI API)                             |
-| Transcribe (local) | `mazinger transcribe --method faster-whisper` | — | `transcribe-faster` (+ CUDA GPU) |
-| Transcribe (local) | `mazinger transcribe --method whisperx` | — | `transcribe-whisperx` (+ CUDA GPU) |
-| Thumbnails      | `mazinger thumbnails`  | ✅           | —                                               |
-| Describe        | `mazinger describe`    | ✅           | —                                               |
-| Translate       | `mazinger translate`   | ✅           | —                                               |
-| Re-segment      | `mazinger resegment`   | ✅           | —                                               |
-| Speak (Qwen)    | `mazinger speak`       | —            | `tts` (+ CUDA GPU)                             |
-| Speak (Chatterbox) | `mazinger speak --tts-engine chatterbox` | — | `tts-chatterbox` (+ CUDA GPU) |
-| Subtitle embed  | `mazinger subtitle`    | ✅           | — (ffmpeg only)                                 |
-| Full dub (Qwen) | `mazinger dub`         | —            | `all-qwen` (+ CUDA GPU)                        |
-| Full dub (Chatterbox) | `mazinger dub --tts-engine chatterbox` | — | `all-chatterbox` (+ CUDA GPU) |
-
----
+See the [Installation Guide](docs/installation.md) for venv recipes, Colab setup, and uv overrides.
 
 ## Quick Start
 
-### One command — dub a video
+### Dub a video in one command
 
 ```bash
 mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
-    --voice-sample reference.m4a \
-    --voice-script reference_transcript.txt \
+    --voice-sample speaker.m4a \
+    --voice-script speaker_transcript.txt \
+    --target-language Spanish \
     --base-dir ./output
 ```
 
-Add `--tts-engine chatterbox` to use Chatterbox instead of Qwen.
+### Use a voice profile instead of local files
 
-### Resuming an interrupted run
-
-By default, every stage caches its outputs. If a run is interrupted (e.g. during TTS), simply re-run the same command — already-completed stages and TTS segments are skipped automatically.
-
-To **discard all cached outputs** and start from scratch, add `--force-reset`:
+Voice profiles are hosted on HuggingFace and downloaded automatically:
 
 ```bash
 mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr \
-    --force-reset
+    --target-language Arabic
 ```
 
-`--force-reset` also works with the standalone `speak` sub-command.
-
-### Using a voice profile
-
-Instead of providing `--voice-sample` and `--voice-script` manually, use a named profile from the [voice profiles dataset](https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles):
+### Produce a video with burned subtitles
 
 ```bash
 mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --clone-profile abubakr \
-    --base-dir ./output
+    --output-type video \
+    --embed-subtitles \
+    --subtitle-google-font "Noto Sans Arabic" \
+    --subtitle-font-size 24
 ```
 
-To produce a dubbed **video** (replaces audio track in the source video):
+### Run a single stage
+
+Every stage has its own sub-command:
 
 ```bash
-mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
-    --clone-profile abubakr \
-    --output-type video
+mazinger download   "https://youtube.com/watch?v=VIDEO_ID" --base-dir ./output
+mazinger transcribe ./output/projects/my-video/source/audio.mp3 -o subs.srt
+mazinger translate  --srt subs.srt --target-language French -o translated.srt
+mazinger subtitle   video.mp4 --srt translated.srt -o output.mp4
 ```
 
-The voice sample and script are downloaded automatically (no auth required). You can also use `--clone-profile` with local files:
-
-```bash
-# Local video with a profile
-mazinger dub ./my_video.mp4 --clone-profile abubakr
-
-# Local audio with a profile
-mazinger dub ./my_audio.mp3 --clone-profile abubakr
-```
-
-### Python
+### Python API
 
 ```python
 from mazinger import MazingerDubber
 
 dubber = MazingerDubber(openai_api_key="sk-...", base_dir="./output")
 
-# With explicit voice files
 proj = dubber.dub(
     source="https://youtube.com/watch?v=VIDEO_ID",
-    voice_sample="reference.m4a",
-    voice_script="reference_transcript.txt",
+    voice_sample="speaker.m4a",
+    voice_script="speaker_transcript.txt",
+    target_language="Spanish",
+    output_type="video",
+    embed_subtitles=True,
 )
 
-# Or resolve a profile first
-from mazinger.profiles import fetch_profile
-voice, script = fetch_profile("abubakr")
-proj = dubber.dub(
-    source="https://youtube.com/watch?v=VIDEO_ID",
-    voice_sample=voice,
-    voice_script=script,
-)
-
-print(proj.final_audio)  # ./output/projects/<slug>/tts/dubbed.wav
+print(proj.final_video)   # ./output/projects/<slug>/tts/dubbed.mp4
 ```
-
-### Embed subtitles into the video
-
-```bash
-# During dubbing — adds translated subtitles to the output video
-mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
-    --clone-profile abubakr --embed-subtitles
-
-# Standalone — burn subtitles into any video + optionally replace audio
-mazinger subtitle video.mp4 --srt translated.srt -o output.mp4
-mazinger subtitle video.mp4 --srt translated.srt --audio dubbed.wav -o output.mp4
-```
-
-All `--subtitle-*` styling flags (font, size, color, position, etc.) work with both commands. See [DOCS.md](DOCS.md#subtitle-embedding) for the full reference.
-
-### Run individual stages
-
-Each pipeline stage has its own sub-command:
-
-```bash
-mazinger download   ...
-mazinger transcribe ...
-mazinger thumbnails ...
-mazinger describe   ...
-mazinger translate  ...
-mazinger resegment  ...
-mazinger speak      ...
-mazinger subtitle   ...
-```
-
-Run any command with `--help` for all options. Full step-by-step guide in [DOCS.md](DOCS.md#step-by-step-usage).
-
----
-
-## Voice Profiles
-
-Voice profiles let you reuse a speaker's voice sample and transcript without passing file paths every time. Profiles are stored on the [mazinger-dubber-profiles](https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles) HuggingFace dataset.
-
-| Profile   | Language | Description      |
-|-----------|----------|------------------|
-| `abubakr` | English  | Abu Bakr Soliman |
-
-See the [profiles README](https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles) for how to upload your own profile.
-
----
-
-## FAQ
-
-**Which TTS engine should I use?**
-Use **Chatterbox** if you only have a voice sample (no transcript needed) or want emotion/pacing control.
-Use **Qwen** for multilingual support with a reference transcript.
-
-**Do I need a GPU?**
-Only for local transcription (`faster-whisper`, `whisperx`) and TTS. If you use `--transcribe-method openai` and an external TTS, a CPU-only machine works fine.
-
-**Can I use Qwen and Chatterbox together?**
-No. They require different `transformers` versions. Use separate virtual environments if you need both.
-
-**Which transcription method works with Chatterbox?**
-`openai` (cloud) and `faster-whisper` (local). WhisperX has a dependency conflict with Chatterbox.
-
-**Where do the output files go?**
-Under `<base-dir>/projects/<slug>/` (default: `./mazinger_output/projects/<slug>/`) — organised into `source/`, `transcription/`, `subtitles/`, `thumbnails/`, `analysis/`, and `tts/` folders.
-
-**My run was interrupted — do I have to start over?**
-No. Re-run the same command and all completed stages (including individual TTS segments) are skipped automatically. Use `--force-reset` only if you want to regenerate everything from scratch.
-
-**How do I pass YouTube cookies for age-restricted videos?**
-Use `--cookies-from-browser chrome` or `--cookies path/to/cookies.txt` with any command.
-
-**flash-attn won't install — is that a problem?**
-No. It's an optional acceleration for TTS. Chatterbox and Qwen both fall back to standard attention automatically.
-
----
 
 ## Documentation
 
-Full installation guides, step-by-step API reference, project structure details, and configuration options:
+Full documentation lives in the [`docs/`](docs/) directory:
 
-**[DOCS.md](DOCS.md)**
-
----
+| Chapter | Contents |
+|---------|----------|
+| [Installation](docs/installation.md) | All install methods, extras, compatibility matrix, Colab and venv recipes |
+| [Quick Start](docs/quick-start.md) | Common workflows with copy-paste examples |
+| [Pipeline Overview](docs/pipeline.md) | How the nine stages connect, data flow, and resume behavior |
+| [CLI Reference](docs/cli-reference.md) | Every command, flag, and default value |
+| [Python API](docs/python-api.md) | Classes, functions, and parameters for programmatic use |
+| [Voice Profiles](docs/voice-profiles.md) | Using, creating, and uploading voice profiles |
+| [Subtitle Styling](docs/subtitle-styling.md) | Fonts, colors, positioning, RTL support, Google Fonts |
+| [Configuration](docs/configuration.md) | Environment variables, caching, tempo control, LLM usage tracking |
+| [Project Structure](docs/project-structure.md) | Output directory layout and file naming conventions |
 
 ## License
 
-[MIT](LICENSE)
+MIT
