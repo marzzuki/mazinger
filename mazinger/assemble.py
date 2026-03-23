@@ -11,6 +11,8 @@ import numpy as np
 import soundfile as sf
 from tqdm.auto import tqdm
 
+from mazinger.utils import get_audio_duration
+
 log = logging.getLogger(__name__)
 
 TARGET_SR = 24_000
@@ -192,6 +194,138 @@ def assemble_timeline(
         stats["sped_up"], stats["slowed_down"], stats["ok"], stats["skipped"],
         stats["truncated"],
     )
+    return output_path
+
+
+def _measure_loudness(path: str) -> float:
+    """Return integrated loudness (LUFS) of an audio file via ffmpeg."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", path,
+         "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    import json as _json, re as _re
+    m = _re.search(r'\{[^}]+"input_i"[^}]+\}', result.stderr, _re.DOTALL)
+    if m:
+        data = _json.loads(m.group())
+        return float(data["input_i"])
+    return -24.0
+
+
+def _extract_background(audio_path: str, out_path: str, sr: int = TARGET_SR) -> str:
+    """Extract non-vocal background from *audio_path*.
+
+    Uses demucs (htdemucs model) for high-quality source separation.
+    Falls back to spectral masking via librosa when demucs is unavailable.
+    """
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    try:
+        import torch, torchaudio
+        from demucs.pretrained import get_model
+        from demucs.apply import apply_model
+
+        log.info("Extracting background with demucs")
+        model = get_model("htdemucs")
+        model.eval()
+        wav, wav_sr = torchaudio.load(audio_path)
+        if wav_sr != model.samplerate:
+            wav = torchaudio.functional.resample(wav, wav_sr, model.samplerate)
+        with torch.no_grad():
+            sources = apply_model(model, wav.unsqueeze(0))
+        # sources: (1, num_stems, channels, samples)
+        vocals_idx = model.sources.index("vocals")
+        bg = sources[0]
+        bg[vocals_idx] = 0
+        bg_np = bg.sum(dim=0).mean(dim=0).cpu().numpy()
+        import librosa
+        if model.samplerate != sr:
+            bg_np = librosa.resample(bg_np, orig_sr=model.samplerate, target_sr=sr)
+        sf.write(out_path, bg_np, sr)
+    except Exception as exc:
+        log.info("Demucs unavailable (%s), using spectral masking fallback", exc)
+        import librosa
+        y, _ = librosa.load(audio_path, sr=sr, mono=True)
+        S = librosa.stft(y)
+        H, P = librosa.decompose.hpss(np.abs(S), kernel_size=31, margin=4.0)
+        mask = P / (H + P + 1e-10)
+        bg = librosa.istft(S * mask, length=len(y))
+        sf.write(out_path, bg, sr)
+    return out_path
+
+
+def post_process(
+    dubbed_path: str,
+    original_audio: str,
+    output_path: str,
+    *,
+    loudness_match: bool = True,
+    mix_background: bool = True,
+    background_volume: float = 0.15,
+) -> str:
+    """Apply loudness normalisation and background audio mixing.
+
+    Parameters:
+        dubbed_path:       Path to the assembled TTS audio.
+        original_audio:    Path to the original source audio.
+        output_path:       Where to write the processed result.
+        loudness_match:    Match dubbed loudness to the original.
+        mix_background:    Extract and mix background from original.
+        background_volume: Gain multiplier for the background layer (0.0–1.0).
+    """
+    if not loudness_match and not mix_background:
+        if dubbed_path != output_path:
+            shutil.copy2(dubbed_path, output_path)
+        return output_path
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    work = dubbed_path
+
+    # -- loudness matching ------------------------------------------------
+    if loudness_match:
+        target_lufs = _measure_loudness(original_audio)
+        target_lufs = max(target_lufs, -30.0)  # safety floor
+        norm_path = output_path + ".norm.wav"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", work,
+             "-af", f"loudnorm=I={target_lufs:.1f}:TP=-1.5:LRA=11",
+             "-ar", str(TARGET_SR), "-ac", "1", norm_path],
+            capture_output=True, check=True,
+        )
+        work = norm_path
+        log.info("Loudness matched to %.1f LUFS", target_lufs)
+
+    # -- background mixing ------------------------------------------------
+    if mix_background:
+        bg_path = os.path.join(os.path.dirname(output_path), "background.wav")
+        _extract_background(original_audio, bg_path, sr=TARGET_SR)
+        log.info("Background audio saved: %s", bg_path)
+
+        dur_dub = get_audio_duration(work)
+        mix_path = output_path + ".mix.wav"
+        filt = (
+            f"[1:a]atrim=0:{dur_dub:.3f},asetpts=PTS-STARTPTS,"
+            f"volume={background_volume:.2f}[bg];"
+            f"[0:a][bg]amix=inputs=2:duration=first:weights=1 {background_volume:.2f}[out]"
+        )
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", work, "-i", bg_path,
+             "-filter_complex", filt, "-map", "[out]",
+             "-ar", str(TARGET_SR), "-ac", "1", mix_path],
+            capture_output=True, check=True,
+        )
+        work = mix_path
+        log.info("Mixed background at volume %.0f%%", background_volume * 100)
+
+    # -- move final result into place ------------------------------------
+    if work != output_path:
+        shutil.move(work, output_path)
+
+    # cleanup temp files (background.wav is kept for inspection)
+    for suffix in (".norm.wav", ".mix.wav"):
+        tmp = output_path + suffix
+        if os.path.exists(tmp) and tmp != output_path:
+            os.remove(tmp)
+
     return output_path
 
 

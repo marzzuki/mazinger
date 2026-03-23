@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mazinger-dubber"
-version = "1.5.0"
+version = "1.6.0"
 description = "End-to-end video dubbing pipeline: transcribe, translate, and voice-clone."
 readme = "README.md"
 license = {text = "MIT"}
@@ -59,13 +59,17 @@ tts-chatterbox = [
 flash-attn = [
     "flash-attn>=2.0",
 ]
+# Optional: demucs for high-quality vocal/background separation
+audio-enhance = [
+    "demucs>=4.0.1",
+]
 # Full pipeline with Qwen TTS — same as bare install (kept as alias)
 all-qwen = [
-    "mazinger-dubber[transcribe-whisperx,tts]",
+    "mazinger-dubber[transcribe-whisperx,tts,audio-enhance]",
 ]
 # Full pipeline with Chatterbox TTS + faster-whisper (fully compatible)
 all-chatterbox = [
-    "mazinger-dubber[transcribe-faster,tts-chatterbox]",
+    "mazinger-dubber[transcribe-faster,tts-chatterbox,audio-enhance]",
 ]
 
 [project.scripts]

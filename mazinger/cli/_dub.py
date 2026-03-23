@@ -27,6 +27,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     add_subtitles(p)
     add_tempo(p)
     add_translation(p)
+    p.add_argument("--no-loudness-match", action="store_true",
+                   help="Skip loudness normalisation against the original audio.")
+    p.add_argument("--no-mix-background", action="store_true",
+                   help="Skip mixing background audio from the original.")
+    p.add_argument("--background-volume", type=float, default=0.15,
+                   help="Background audio mix level, 0.0-1.0 (default: 0.15).")
     p.add_argument("--force-reset", action="store_true",
                    help="Discard all cached outputs and re-run every stage.")
     add_common(p)
@@ -78,5 +84,8 @@ def handler(args: argparse.Namespace) -> None:
         translate_technical_terms=args.translate_technical_terms,
         subtitle_style=subtitle_style,
         subtitle_source=args.subtitle_source,
+        loudness_match=not args.no_loudness_match,
+        mix_background=not args.no_mix_background,
+        background_volume=args.background_volume,
     )
     print(proj.summary())

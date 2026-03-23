@@ -122,7 +122,14 @@ Tempo modes:
 | `fixed` | Apply a constant multiplier to all segments (e.g., 1.1×) |
 | `off` | No tempo change — place segments as-is |
 
-**Inputs:** `tts/segments/seg_NNNN.wav`, original audio duration
+After placement, two post-processing steps run by default:
+
+- **Loudness matching** — measures the original audio's integrated loudness (LUFS) and normalises the dubbed track to the same level via ffmpeg `loudnorm`.
+- **Background mixing** — extracts non-vocal audio (music, ambience) from the original and mixes it beneath the dubbed voice. Uses `demucs` when available, otherwise a centre-cancel technique.
+
+Both can be disabled with `--no-loudness-match` and `--no-mix-background`. The background level is tuneable with `--background-volume` (default 0.15).
+
+**Inputs:** `tts/segments/seg_NNNN.wav`, original audio duration, `source/audio.mp3`
 **Outputs:** `tts/dubbed.wav`
 
 ### 9. Subtitle (optional)

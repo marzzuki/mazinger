@@ -13,7 +13,7 @@ Mazinger chains nine stages into a single pipeline:
 5. **Translate** — translate the SRT into another language with duration-aware word budgets
 6. **Re-segment** — merge fragments and split oversized subtitles for readability
 7. **Speak** — synthesize voice-cloned speech for every subtitle entry (Qwen3-TTS or Chatterbox)
-8. **Assemble** — place each audio segment on the original timeline with optional tempo adjustment
+8. **Assemble** — place each audio segment on the original timeline with optional tempo adjustment, loudness matching, and background audio mixing
 9. **Subtitle** — burn styled subtitles into the video and/or mux the new audio track
 
 Every stage can run independently or as part of the full pipeline. Interrupted runs resume automatically — completed stages and individual TTS segments are cached and skipped.

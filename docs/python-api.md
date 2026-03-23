@@ -56,6 +56,9 @@ proj = dubber.dub(
     words_per_second=None,            # float — speech rate for word budgets (default: 2.0)
     duration_budget=None,             # float — fraction of time for speech (default: 0.80)
     translate_technical_terms=False,   # bool — translate tech terms vs. keep in English
+    loudness_match=True,              # bool — normalise dubbed loudness to original
+    mix_background=True,              # bool — mix original background audio under dub
+    background_volume=0.15,           # float — background layer gain (0.0–1.0)
     output_type="audio",              # str — "audio" (WAV) or "video" (MP4)
     subtitle_style=None,              # SubtitleStyle — styling for burned subtitles
     subtitle_source="translated",     # str — "translated", "original", or file path
@@ -323,6 +326,13 @@ assemble_timeline(segments, duration, "dubbed.wav", tempo_mode="dynamic", max_te
 
 # Mux audio into video
 mux_video("video.mp4", "dubbed.wav", "dubbed.mp4")
+
+# Post-process: loudness matching + background mixing
+from mazinger.assemble import post_process
+post_process("dubbed.wav", "audio.mp3", "dubbed_final.wav")
+
+# Skip background mixing, only normalise loudness
+post_process("dubbed.wav", "audio.mp3", "dubbed_final.wav", mix_background=False)
 ```
 
 ### subtitle

@@ -57,6 +57,9 @@ mazinger dub <source> [options]
 | `--dynamic-tempo` | off | Per-segment speed matching |
 | `--fixed-tempo` | — | Constant speed multiplier (e.g., `1.1`) |
 | `--max-tempo` | `1.3` | Maximum speed-up for dynamic/auto tempo |
+| `--no-loudness-match` | off | Skip loudness normalisation against the original audio |
+| `--no-mix-background` | off | Skip mixing background audio from the original |
+| `--background-volume` | `0.15` | Background audio mix level (0.0–1.0) |
 | `--start` | — | Start timestamp for slicing (e.g. `00:01:30` or `90`) |
 | `--end` | — | End timestamp for slicing (e.g. `00:05:00` or `300`) |
 | `--force-reset` | off | Discard all cached outputs and re-run from scratch |

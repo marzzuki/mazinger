@@ -75,6 +75,9 @@ class MazingerDubber:
         chatterbox_model: str = "ResembleAI/chatterbox",
         chatterbox_exaggeration: float = 0.5,
         chatterbox_cfg: float = 0.5,
+        loudness_match: bool = True,
+        mix_background: bool = True,
+        background_volume: float = 0.15,
         cookies_from_browser: str | None = None,
         cookies: str | None = None,
         quality: str | None = None,
@@ -322,6 +325,15 @@ class MazingerDubber:
             fixed_tempo=fixed_tempo,
             max_tempo=max_tempo,
         )
+
+        # 8b. Post-process: loudness + background -------------------------
+        if loudness_match or mix_background:
+            assemble.post_process(
+                proj.final_audio, proj.audio, proj.final_audio,
+                loudness_match=loudness_match,
+                mix_background=mix_background,
+                background_volume=background_volume,
+            )
 
         drift = abs(get_audio_duration(proj.final_audio) - original_duration)
         log.info("Done. Final audio: %s (drift: %.3fs)", proj.final_audio, drift)
