@@ -8,6 +8,7 @@ build/
 dist/
 *.egg-info/
 *.egg
+mazinger/docs/notebooks/.gradio
 
 # Virtual environments
 .venv/
@@ -44,3 +45,4 @@ coverage.xml
 
 # Jupyter
 .ipynb_checkpoints/
+docs/notebooks/.gradio/certificate.pem
