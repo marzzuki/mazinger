@@ -243,8 +243,8 @@ def _split_proportional(
 
 def resegment(
     segments: list[dict],
-    max_chars: int = 120,
-    max_duration: float = 10.0,
+    max_chars: int = 84,
+    max_duration: float = 5.0,
 ) -> list[dict]:
     """Split long WhisperX segments into subtitle-friendly chunks.
 
@@ -334,6 +334,7 @@ def _transcribe_faster_whisper(
     batch_size: int = 16,
     compute_type: str = "float16",
     language: str | None = None,
+    beam_size: int = 5,
 ) -> tuple[list[dict], str]:
     """Transcribe using faster-whisper (CTranslate2).
 
@@ -370,6 +371,7 @@ def _transcribe_faster_whisper(
         audio_path,
         batch_size=batch_size,
         language=language,
+        beam_size=beam_size,
         word_timestamps=True,
         vad_filter=True,
     )
@@ -461,6 +463,76 @@ def _transcribe_whisperx(
     return raw_segments, detected_lang
 
 
+# ── LLM-based text refinement ────────────────────────────────────────────────
+
+def _refine_segments_llm(
+    segments: list[dict],
+    detected_lang: str,
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    llm_model: str = "gpt-4.1",
+) -> list[dict]:
+    """Use an LLM to add punctuation and fix misheard words in transcribed text.
+
+    Preserves timestamps — only the text of each segment is modified.
+    """
+    from openai import OpenAI
+
+    kwargs: dict[str, Any] = {}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = OpenAI(**kwargs)
+
+    # Build the text block with indices so we can map back
+    numbered = []
+    for i, seg in enumerate(segments):
+        numbered.append(f"[{i}] {seg['text']}")
+    text_block = "\n".join(numbered)
+
+    resp = client.chat.completions.create(
+        model=llm_model,
+        temperature=0.2,
+        messages=[
+            {"role": "system", "content": (
+                f"You are a transcript editor for {detected_lang} speech-to-text output. "
+                "Fix misheard words, add punctuation (commas, periods, question marks), "
+                "and correct obvious spelling errors. Keep the original meaning and word order intact. "
+                "Do NOT add, remove, or reorder content. Do NOT translate. "
+                "Return each line in the same [index] format."
+            )},
+            {"role": "user", "content": text_block},
+        ],
+    )
+
+    refined_text = resp.choices[0].message.content.strip()
+
+    # Parse refined lines back by index
+    refined_map: dict[int, str] = {}
+    for line in refined_text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            bracket_end = line.find("]")
+            if bracket_end > 0:
+                try:
+                    idx = int(line[1:bracket_end])
+                    refined_map[idx] = line[bracket_end + 1:].strip()
+                except ValueError:
+                    pass
+
+    result = []
+    for i, seg in enumerate(segments):
+        seg = dict(seg)
+        if i in refined_map and refined_map[i]:
+            seg["text"] = refined_map[i]
+        result.append(seg)
+
+    log.info("LLM refinement applied to %d/%d segments", len(refined_map), len(segments))
+    return result
+
+
 # ── Main transcription entry point ────────────────────────────────────────────
 
 def transcribe(
@@ -473,9 +545,12 @@ def transcribe(
     batch_size: int = 4,
     compute_type: str = "float16",
     language: str | None = None,
-    max_chars: int = 120,
-    max_duration: float = 10.0,
+    beam_size: int = 5,
+    max_chars: int = 84,
+    max_duration: float = 5.0,
     skip_resegment: bool = False,
+    refine: bool = False,
+    llm_model: str = "gpt-4.1",
     openai_api_key: str | None = None,
     openai_base_url: str | None = None,
 ) -> str:
@@ -536,6 +611,7 @@ def transcribe(
             batch_size=batch_size,
             compute_type=compute_type,
             language=language,
+            beam_size=beam_size,
         )
     elif method == "whisperx":
         default_model = "large-v3"
@@ -554,6 +630,15 @@ def transcribe(
 
     # Clean up common transcription artifacts
     raw_segments = _clean_segments(raw_segments)
+
+    # LLM refinement: punctuation and misheard-word correction
+    if refine:
+        raw_segments = _refine_segments_llm(
+            raw_segments, detected_lang,
+            api_key=openai_api_key,
+            base_url=openai_base_url,
+            llm_model=llm_model,
+        )
 
     # Save raw SRT
     base, ext = os.path.splitext(output_path)

@@ -60,6 +60,7 @@ def handler(args: argparse.Namespace) -> None:
         device=args.device,
         transcribe_method=args.transcribe_method,
         whisper_model=args.whisper_model,
+        beam_size=args.beam_size,
         tts_model_name=args.tts_model,
         tts_language=args.tts_language,
         tts_engine=args.tts_engine,

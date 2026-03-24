@@ -38,6 +38,7 @@ mazinger dub <source> [options]
 | `--voice-script` | — | Path to transcript of the voice sample (or inline text) |
 | `--transcribe-method` | `openai` | `openai`, `faster-whisper`, or `whisperx` |
 | `--whisper-model` | varies by method | Whisper model name |
+| `--beam-size` | `5` | Beam size for decoding (faster-whisper/whisperx) |
 | `--device` | `auto` | `auto`, `cuda`, or `cpu` |
 | `--source-language` | `auto` | Source language for translation (or `auto` to detect) |
 | `--target-language` | `English` | Target language for translation |
@@ -174,10 +175,13 @@ If `source` is provided, the video is downloaded first and its audio is transcri
 | `--device` | `auto` | `auto`, `cuda`, `cpu` |
 | `--batch-size` | `16` | Batch size for local transcription |
 | `--compute-type` | `float16` | Weight precision: `float16`, `int8`, `int8_float16` |
+| `--beam-size` | `5` | Beam size for decoding (default: 5) |
 | `--language` | auto-detect | Force a language code (e.g., `en`, `ar`, `fr`) |
-| `--max-chars` | `120` | Max characters per subtitle entry |
-| `--max-duration` | `10.0` | Max seconds per subtitle entry |
+| `--max-chars` | `84` | Max characters per subtitle entry |
+| `--max-duration` | `5.0` | Max seconds per subtitle entry |
 | `--no-resegment` | off | Skip the post-transcription resegmentation step |
+| `--refine` | off | Use LLM to add punctuation and fix misheard words |
+| `--llm-model` | `gpt-4.1` | LLM model for refinement |
 | `--openai-api-key` | `$OPENAI_API_KEY` | OpenAI API key (for cloud method) |
 
 **Examples:**

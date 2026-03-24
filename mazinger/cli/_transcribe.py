@@ -20,10 +20,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--device", default="auto", help="Device: auto (default), cuda, or cpu.")
     p.add_argument("--batch-size", type=int, default=16, help="Batch size for local methods.")
     p.add_argument("--compute-type", default="float16", help="Compute type: float16, int8, int8_float16.")
+    p.add_argument("--beam-size", type=int, default=5, help="Beam size for decoding (default: 5).")
     p.add_argument("--language", default=None, help="Force language code (e.g., en, ar).")
-    p.add_argument("--max-chars", type=int, default=120, help="Max chars per subtitle.")
-    p.add_argument("--max-duration", type=float, default=10.0, help="Max seconds per subtitle.")
+    p.add_argument("--max-chars", type=int, default=84, help="Max chars per subtitle.")
+    p.add_argument("--max-duration", type=float, default=5.0, help="Max seconds per subtitle.")
     p.add_argument("--no-resegment", action="store_true", help="Skip resegmentation.")
+    p.add_argument("--refine", action="store_true",
+                   help="Use LLM to add punctuation and fix misheard words.")
+    p.add_argument("--llm-model", default="gpt-4.1", help="LLM model for refinement.")
     add_openai(p)
     add_common(p)
 
@@ -52,9 +56,12 @@ def handler(args: argparse.Namespace) -> None:
         batch_size=args.batch_size,
         compute_type=args.compute_type,
         language=args.language,
+        beam_size=args.beam_size,
         max_chars=args.max_chars,
         max_duration=args.max_duration,
         skip_resegment=args.no_resegment,
+        refine=args.refine,
+        llm_model=args.llm_model,
         openai_api_key=args.openai_api_key,
         openai_base_url=args.openai_base_url,
     )

@@ -191,6 +191,7 @@ def add_transcription(p: argparse.ArgumentParser) -> None:
         help="Transcription backend: 'openai', 'faster-whisper', or 'whisperx'.",
     )
     p.add_argument("--whisper-model", default=None, help="Whisper model name.")
+    p.add_argument("--beam-size", type=int, default=5, help="Beam size for decoding (default: 5).")
 
 
 def add_cookies(p: argparse.ArgumentParser) -> None:
