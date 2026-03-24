@@ -8,6 +8,13 @@
   End-to-end video dubbing pipeline. Download a video, transcribe it, translate the subtitles, clone a voice, and produce a fully dubbed audio or video file — in one command.
 </p>
 
+<p align="center">
+  <a href="https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles/resolve/main/promo-demo/mazinger-promo.mp4?download=true">
+    <img src="https://raw.githubusercontent.com/bakrianoo/mazinger/refs/heads/master/docs/assets/thumbnail.png" alt="Watch demo video" width="720" /><br/>
+    ▶️ Watch Demo Video (with audio)
+  </a>
+</p>
+
 ## What It Does
 
 Mazinger chains nine stages into a single pipeline:
