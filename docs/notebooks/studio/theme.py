@@ -175,6 +175,8 @@ footer { display: none !important; }
     background: #020617 !important;
     color: #94a3b8 !important;
     border-radius: 8px !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
 }
 
 /* ── Results area ───────────────────────────────────────────────── */

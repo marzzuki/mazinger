@@ -322,6 +322,7 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             lines=15,
             max_lines=40,
             interactive=False,
+            autoscroll=True,
             elem_classes="log-box",
         )
 
