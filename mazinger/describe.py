@@ -49,12 +49,12 @@ def describe_content(
     Returns:
         A dict with ``title``, ``summary``, ``keypoints``, and ``keywords``.
     """
-    # Evenly sample thumbnails across the video timeline to stay concise.
-    MAX_IMAGES = 50
+    # Evenly sample thumbnails — keep the payload manageable for smaller models.
+    MAX_IMAGES = 8
     if len(thumb_paths) > MAX_IMAGES:
         step = len(thumb_paths) / MAX_IMAGES
         thumb_paths = [thumb_paths[int(i * step)] for i in range(MAX_IMAGES)]
-        log.info("Sampled %d thumbnails (original count exceeded API limit)", MAX_IMAGES)
+        log.info("Sampled %d/%d thumbnails for description", MAX_IMAGES, len(thumb_paths))
 
     user_parts: list[dict] = []
     for tp in thumb_paths:

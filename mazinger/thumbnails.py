@@ -113,7 +113,7 @@ def _uniform_timestamps(
     min_gap: float,
 ) -> list[dict]:
     """Generate evenly-spaced timestamps as a fallback when the LLM fails."""
-    count = max(1, min(12, int(total_end // max(min_gap, 5))))
+    count = max(1, min(8, int(total_end // max(min_gap, 10))))
     step = total_end / (count + 1)
     results = []
     for i in range(1, count + 1):

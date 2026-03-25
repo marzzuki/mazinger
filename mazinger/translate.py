@@ -255,6 +255,10 @@ def _build_messages(
     user_parts.append({"type": "text", "text": ctx})
 
     if batch_thumbs:
+        # Cap images per batch to keep prompt size reasonable for smaller models.
+        if len(batch_thumbs) > 4:
+            step = len(batch_thumbs) / 4
+            batch_thumbs = [batch_thumbs[int(i * step)] for i in range(4)]
         user_parts.append({"type": "text", "text": "SCREENSHOTS from this segment:"})
         for tp in batch_thumbs:
             user_parts.append({"type": "text", "text": f"  [{tp['timestamp']}] {tp['reason']}"})
