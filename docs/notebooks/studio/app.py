@@ -8,7 +8,7 @@ from constants import (
 )
 from theme import theme, CSS
 from helpers import free_gpu_and_restart_ollama
-from pipeline import run_dubbing
+from pipeline import run_dubbing, render_video
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -232,7 +232,18 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
     # ── Advanced Settings ─────────────────────────────────────────
     with gr.Accordion("⚙️  Advanced Settings", open=False):
         with gr.Tabs():
-            with gr.Tab("🔌 API Override"):
+            with gr.Tab("� Output"):
+                output_type = gr.Radio(
+                    ["Dubbed Audio", "Transcription Subtitles", "Translated Subtitles"],
+                    value="Dubbed Audio",
+                    label="What to produce",
+                )
+                force_reset = gr.Checkbox(
+                    label="Force reset (discard cache, re-run all stages)",
+                    value=False,
+                )
+
+            with gr.Tab("�🔌 API Override"):
                 gr.Markdown(
                     "*Override the LLM provider settings above. "
                     "Leave empty to use defaults.*",
@@ -327,18 +338,6 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                     label="Background volume",
                 )
 
-            with gr.Tab("📦 Output"):
-                output_type = gr.Dropdown(
-                    ["Audio", "Video"],
-                    value="Audio",
-                    label="Output type",
-                    info="Audio = dubbed WAV  •  Video = mux into source",
-                )
-                force_reset = gr.Checkbox(
-                    label="Force reset (discard cache, re-run all stages)",
-                    value=False,
-                )
-
     gr.HTML('<hr class="divider">')
 
     # ── Run Button ────────────────────────────────────────────────
@@ -367,9 +366,78 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
     # ── Results ───────────────────────────────────────────────────
     gr.Markdown("#### 📦  RESULTS", elem_classes="section-title")
     with gr.Group(elem_classes="results-card"):
-        with gr.Row():
-            audio_output = gr.Audio(label="Dubbed Audio", type="filepath")
-            video_output = gr.Video(label="Dubbed Video")
+        audio_output = gr.Audio(label="Dubbed Audio", type="filepath", visible=True)
+        srt_output = gr.File(label="Subtitles (SRT)", visible=False)
+
+    # ── Render Video ──────────────────────────────────────────────
+    render_state = gr.State(value=None)
+
+    with gr.Group(visible=False, elem_classes="render-card") as render_section:
+        gr.Markdown(
+            "#### 🎞️  RENDER VIDEO\n"
+            "Combine your dubbed audio and subtitles into a downloadable video.",
+            elem_classes="section-title",
+        )
+
+        with gr.Row(equal_height=True):
+            render_dubbed = gr.Checkbox(label="Dubbed audio", value=True)
+            render_orig_subs = gr.Checkbox(label="Original subtitles", value=False)
+            render_trans_subs = gr.Checkbox(label="Translated subtitles", value=False)
+
+        # Keep original / translated mutually exclusive
+        def _exc_orig(val):
+            return gr.update(value=False) if val else gr.update()
+        def _exc_trans(val):
+            return gr.update(value=False) if val else gr.update()
+        render_orig_subs.change(_exc_orig, render_orig_subs, render_trans_subs)
+        render_trans_subs.change(_exc_trans, render_trans_subs, render_orig_subs)
+
+        with gr.Accordion("Subtitle style", open=False):
+            with gr.Row(equal_height=True):
+                sub_font_size = gr.Slider(
+                    8, 32, value=14, step=1, label="Font size",
+                )
+                sub_position = gr.Dropdown(
+                    ["Bottom", "Top", "Center"],
+                    value="Bottom", label="Position",
+                )
+            with gr.Row(equal_height=True):
+                sub_color = gr.Dropdown(
+                    ["White", "Yellow", "Cyan"],
+                    value="White", label="Font color",
+                )
+                sub_bg_alpha = gr.Slider(
+                    0.0, 1.0, value=0.6, step=0.1, label="Background opacity",
+                )
+
+        render_btn = gr.Button(
+            "🎬  Render Video",
+            variant="primary",
+            elem_classes="render-btn",
+        )
+
+        render_status = gr.Textbox(label="Render Status", interactive=False)
+        with gr.Accordion("📋 Render Log", open=False):
+            render_logs = gr.Textbox(
+                label="Log output", lines=8, max_lines=20,
+                interactive=False, autoscroll=True,
+                elem_classes="log-box",
+            )
+        render_video_output = gr.Video(label="Rendered Video")
+
+    def _show_render(paths):
+        has_video = bool(paths and paths.get("video"))
+        return gr.update(visible=has_video)
+
+    render_btn.click(
+        fn=render_video,
+        inputs=[
+            render_state,
+            render_dubbed, render_orig_subs, render_trans_subs,
+            sub_font_size, sub_position, sub_color, sub_bg_alpha,
+        ],
+        outputs=[render_status, render_logs, render_video_output],
+    )
 
     # ── LLM provider toggle ───────────────────────────────────────
     # Auto-switches transcription method when LLM provider changes
@@ -403,7 +471,20 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             tempo_mode, max_tempo, loudness_match, mix_background, background_volume,
             output_type, force_reset,
         ],
-        outputs=[status, logs, audio_output, video_output],
+        outputs=[status, logs, audio_output, srt_output, render_state],
+    ).then(
+        fn=_show_render,
+        inputs=[render_state],
+        outputs=[render_section],
+    )
+
+    # Toggle result widgets based on output type selection
+    def _on_output_type_change(choice):
+        is_dub = (choice == "Dubbed Audio")
+        return gr.update(visible=is_dub), gr.update(visible=not is_dub)
+    output_type.change(
+        _on_output_type_change, output_type,
+        [audio_output, srt_output],
     )
 
 

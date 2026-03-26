@@ -306,4 +306,24 @@ footer { display: none !important; }
     font-size: 0.8rem;
     margin-right: 0.4rem;
 }
+
+/* ── Render video panel ─────────────────────────────────────────── */
+.render-card {
+    background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(244,114,182,0.08)) !important;
+    border: 1px solid rgba(139,92,246,0.25) !important;
+    border-radius: 12px !important;
+    padding: 1rem !important;
+    margin-top: 0.5rem !important;
+}
+.render-btn {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    padding: 0.7rem 1.5rem !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3) !important;
+}
+.render-btn:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4) !important;
+}
 """
