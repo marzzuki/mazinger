@@ -128,9 +128,11 @@ class _OllamaChatCompletions:
             "options": {"temperature": temperature},
         }
         # Per-call ``think`` overrides the client-level default.
+        # Default to *disabled* so thinking models don't burn tokens
+        # unless explicitly opted-in via ``build_client(think=True)``
+        # or a per-call ``think=True``.
         think = _kwargs.get("think", self._think)
-        if think is not None:
-            body["think"] = think
+        body["think"] = bool(think)
 
         data = json.dumps(body).encode()
         req = urllib.request.Request(

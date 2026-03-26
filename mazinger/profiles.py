@@ -18,6 +18,10 @@ PROFILES_REPO_URL = (
 SCRIPT_FILENAME = "script.txt"
 VOICE_EXTENSIONS = ("wav", "m4a", "mp3")
 
+MIN_CLONE_DURATION = 20.0
+MAX_CLONE_DURATION = 60.0
+MIN_CLONE_WORDS = 20
+
 
 def _download_file(url: str, dest: str) -> None:
     """Download *url* to *dest*, creating parent directories as needed."""
@@ -567,6 +571,83 @@ def _load_local_profile(profile_dir: str) -> tuple[str, str]:
         f"No voice file in {profile_dir} "
         f"(tried: {', '.join(f'voice.{e}' for e in VOICE_EXTENSIONS)})"
     )
+
+
+def create_auto_clone_profile(
+    audio_path: str,
+    srt_path: str,
+    output_dir: str,
+) -> tuple[str, str]:
+    """Create a voice profile by extracting a segment from *audio_path*.
+
+    Selects a contiguous block of SRT entries spanning 20–60 s with the
+    highest word count, extracts the matching audio slice, and writes
+    ``voice.wav`` + ``script.txt`` into *output_dir*.
+
+    Returns:
+        ``(voice_wav_path, script_path)``
+    """
+    from mazinger.srt import parse_file
+
+    entries = parse_file(srt_path)
+    if not entries:
+        raise ValueError("Cannot auto-clone: SRT file is empty")
+
+    total_dur = entries[-1]["end"] - entries[0]["start"]
+    if total_dur < MIN_CLONE_DURATION:
+        raise ValueError(
+            f"Cannot auto-clone: source audio is {total_dur:.1f}s "
+            f"(need at least {MIN_CLONE_DURATION:.0f}s). "
+            "Provide --voice-sample + --voice-script instead."
+        )
+
+    best_i = best_j = 0
+    best_words = 0
+
+    for i in range(len(entries)):
+        words = 0
+        for j in range(i, len(entries)):
+            span = entries[j]["end"] - entries[i]["start"]
+            words += len(entries[j]["text"].split())
+            if span > MAX_CLONE_DURATION:
+                break
+            if span >= MIN_CLONE_DURATION and words > best_words:
+                best_words = words
+                best_i, best_j = i, j
+
+    if best_words < MIN_CLONE_WORDS:
+        raise ValueError(
+            f"Cannot auto-clone: best segment has {best_words} words "
+            f"(need at least {MIN_CLONE_WORDS}). "
+            "Provide --voice-sample + --voice-script instead."
+        )
+
+    start_t = entries[best_i]["start"]
+    end_t = entries[best_j]["end"]
+    script = " ".join(e["text"] for e in entries[best_i:best_j + 1])
+
+    os.makedirs(output_dir, exist_ok=True)
+    wav_path = os.path.join(output_dir, "voice.wav")
+    script_path = os.path.join(output_dir, SCRIPT_FILENAME)
+
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", audio_path,
+            "-ss", str(start_t), "-to", str(end_t),
+            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+            wav_path,
+        ],
+        check=True, capture_output=True,
+    )
+
+    with open(script_path, "w", encoding="utf-8") as fh:
+        fh.write(script)
+
+    log.info(
+        "Auto-cloned voice profile: %.1fs, %d words -> %s",
+        end_t - start_t, best_words, output_dir,
+    )
+    return wav_path, script_path
 
 
 def fetch_profile(profile_name: str, cache_dir: str | None = None) -> tuple[str, str]:

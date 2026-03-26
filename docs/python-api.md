@@ -74,6 +74,8 @@ proj = dubber.dub(
 
 Returns a `ProjectPaths` instance with all output paths populated.
 
+> When neither `voice_sample`/`voice_script` nor `voice_theme` is provided, the pipeline automatically clones the speaker's voice from the source audio (auto-clone). A 20–60 s segment with the best word coverage is selected from the transcript.
+>
 > When `voice_theme` is provided, `voice_sample` and `voice_script` are optional. The theme generates a voice profile automatically and saves it to the project's `voice_profile/` directory.
 
 ### Full workflow example
@@ -81,7 +83,20 @@ Returns a `ProjectPaths` instance with all output paths populated.
 ```python
 from mazinger import MazingerDubber
 
-# Using a voice theme (simplest approach)
+# Auto-clone the speaker's voice (simplest — no voice configuration)
+dubber = MazingerDubber(openai_api_key="sk-...", base_dir="./output")
+
+proj = dubber.dub(
+    source="https://youtube.com/watch?v=VIDEO_ID",
+    target_language="Spanish",
+    output_type="video",
+)
+
+print(proj.final_video)
+```
+
+```python
+# Using a voice theme
 dubber = MazingerDubber(openai_api_key="sk-...", base_dir="./output")
 
 proj = dubber.dub(

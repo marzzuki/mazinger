@@ -4,6 +4,16 @@
 
 The `dub` command runs the full pipeline: download, transcribe, translate, synthesize, and assemble.
 
+The simplest way — auto-clone the original speaker's voice:
+
+```bash
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
+    --target-language Spanish \
+    --base-dir ./output
+```
+
+Or provide your own voice files:
+
 ```bash
 mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
     --voice-sample speaker.m4a \

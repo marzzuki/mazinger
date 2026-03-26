@@ -49,9 +49,6 @@ def handler(args: argparse.Namespace) -> None:
     args.device = resolve_device(args.device)
     voice_sample, voice_script = resolve_voice(args)
     voice_theme = getattr(args, "voice_theme", None)
-    if not voice_theme and not (voice_sample and voice_script):
-        import sys
-        sys.exit("Error: provide --voice-sample + --voice-script, --clone-profile, or --voice-theme.")
     subtitle_style = subtitle_style_from_args(args) if args.embed_subtitles else None
 
     dubber = MazingerDubber(

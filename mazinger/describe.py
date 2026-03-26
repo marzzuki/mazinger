@@ -76,6 +76,7 @@ def describe_content(
     resp = client.chat.completions.create(
         model=llm_model,
         temperature=0.2,
+        think=False,
         messages=[
             {"role": "system", "content": _DESCRIBE_SYSTEM},
             {"role": "user", "content": user_parts},

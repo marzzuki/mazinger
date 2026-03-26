@@ -191,10 +191,7 @@ class MazingerDubber:
                     device=device_for_tts, dtype=tts_dtype,
                 )
 
-        if not voice_sample or not voice_script:
-            raise ValueError(
-                "Provide voice_sample + voice_script, or voice_theme."
-            )
+        auto_clone = not voice_sample and not voice_script
 
         if force_reset:
             skip_existing = False
@@ -203,12 +200,14 @@ class MazingerDubber:
         client = self._llm_client()
         usage_tracker = LLMUsageTracker()
 
-        # -- Read voice script -------------------------------------------
-        if os.path.isfile(voice_script):
-            with open(voice_script, encoding="utf-8") as fh:
-                ref_text = fh.read().strip()
-        else:
-            ref_text = voice_script.strip()
+        # -- Read voice script (deferred when auto-cloning) ---------------
+        ref_text = None
+        if not auto_clone:
+            if os.path.isfile(voice_script):
+                with open(voice_script, encoding="utf-8") as fh:
+                    ref_text = fh.read().strip()
+            else:
+                ref_text = voice_script.strip()
 
         # 1. Acquire source audio ----------------------------------------
         is_local_audio = not is_remote and download.is_audio_file(source)
@@ -314,6 +313,26 @@ class MazingerDubber:
                 )
                 with open(proj.reviewed_srt, "w", encoding="utf-8") as fh:
                     fh.write(source_srt_text)
+
+        # -- Auto-clone voice from source audio ---------------------------
+        if auto_clone:
+            from mazinger.profiles import create_auto_clone_profile, _load_local_profile
+            profile_dir = proj.voice_profile_dir
+            profile_wav = os.path.join(profile_dir, "voice.wav")
+            if skip_existing and os.path.isfile(profile_wav):
+                log.info("Reusing auto-cloned voice profile: %s", profile_dir)
+                voice_sample, voice_script = _load_local_profile(profile_dir)
+            else:
+                clone_srt = (
+                    proj.reviewed_srt
+                    if os.path.exists(proj.reviewed_srt)
+                    else source_srt_for_pipeline
+                )
+                voice_sample, voice_script = create_auto_clone_profile(
+                    proj.audio, clone_srt, profile_dir,
+                )
+            with open(voice_script, encoding="utf-8") as fh:
+                ref_text = fh.read().strip()
 
         # 5. Translate ---------------------------------------------------
         if skip_existing and os.path.exists(proj.translated_raw_srt):

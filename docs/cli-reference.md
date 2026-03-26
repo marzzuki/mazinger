@@ -77,6 +77,10 @@ All `--subtitle-*` styling flags are also accepted. See [Subtitle Styling](subti
 **Examples:**
 
 ```bash
+# Auto-clone the speaker's voice (simplest — no voice flags needed)
+mazinger dub "https://youtube.com/watch?v=abc123" \
+    --target-language Spanish
+
 # Dub with a voice theme (easiest)
 mazinger dub "https://youtube.com/watch?v=abc123" \
     --voice-theme narrator-m --target-language Spanish

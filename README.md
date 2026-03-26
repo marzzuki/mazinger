@@ -108,6 +108,22 @@ mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
 
 List all themes with `mazinger profile list`. Generate a reusable profile with `mazinger profile generate`. See [Voice Profiles](docs/voice-profiles.md) for details.
 
+### Auto-clone the original speaker's voice
+
+When no voice option is provided, Mazinger automatically clones the speaker directly from the source audio. The pipeline picks the best 20–60 s segment from the transcription and uses it as the cloning reference — no files or configuration needed.
+
+```bash
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
+    --target-language Spanish
+```
+
+```python
+proj = dubber.dub(
+    source="https://youtube.com/watch?v=VIDEO_ID",
+    target_language="Spanish",
+)
+```
+
 ### Produce a video with burned subtitles
 
 ```bash
@@ -144,6 +160,12 @@ proj = dubber.dub(
     voice_theme="narrator-m",
     target_language="Spanish",
     output_type="video",
+)
+
+# Auto-clone the speaker's voice (no voice option needed)
+proj = dubber.dub(
+    source="https://youtube.com/watch?v=VIDEO_ID",
+    target_language="Spanish",
 )
 
 # Or with explicit voice files

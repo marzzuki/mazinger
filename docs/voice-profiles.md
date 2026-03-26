@@ -1,16 +1,49 @@
 # Voice Profiles & Custom Voice Cloning
 
-Mazinger can clone any voice to produce dubbed audio. There are three ways to provide a voice:
+Mazinger can clone any voice to produce dubbed audio. There are four ways to provide a voice:
 
-1. **Use a voice theme** — pass `--voice-theme <name>` to generate a voice from 16 pre-defined themes (no files needed)
-2. **Use a built-in profile** — pass `--clone-profile <name>` and Mazinger downloads the voice sample automatically from HuggingFace (or point it to a local directory)
-3. **Use your own voice files** — pass `--voice-sample` and `--voice-script` with local files you recorded yourself
+1. **Auto-clone** — omit all voice flags and Mazinger clones the speaker directly from the source audio (nothing to configure)
+2. **Use a voice theme** — pass `--voice-theme <name>` to generate a voice from 16 pre-defined themes (no files needed)
+3. **Use a built-in profile** — pass `--clone-profile <name>` and Mazinger downloads the voice sample automatically from HuggingFace (or point it to a local directory)
+4. **Use your own voice files** — pass `--voice-sample` and `--voice-script` with local files you recorded yourself
 
-All three approaches work with the full `dub` pipeline and the standalone `speak` sub-command.
+All four approaches work with the full `dub` pipeline and the standalone `speak` sub-command.
 
 ---
 
-## Option 1: Use a Voice Theme (Easiest)
+## Option 1: Auto-Clone (Simplest)
+
+When no voice option is provided, Mazinger automatically extracts a 20–60 second segment from the source audio with the highest word density and uses it — along with the corresponding transcript — as the voice cloning reference. The cloned profile is saved to the project's `voice_profile/` directory and reused on subsequent runs.
+
+### CLI
+
+```bash
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
+    --target-language Spanish
+```
+
+### Python
+
+```python
+from mazinger import MazingerDubber
+
+dubber = MazingerDubber(openai_api_key="sk-...", base_dir="./output")
+
+proj = dubber.dub(
+    source="https://youtube.com/watch?v=VIDEO_ID",
+    target_language="Spanish",
+)
+```
+
+### Requirements
+
+- The source audio must be at least 20 seconds long
+- The selected segment must contain at least 20 words
+- If the source is too short or too sparse, provide a voice explicitly with one of the options below
+
+---
+
+## Option 2: Use a Voice Theme (Easiest)
 
 Pre-defined voice themes are the simplest way to get started. No recording or file download needed — Mazinger generates a reference voice automatically using the Qwen3-TTS VoiceDesign model.
 
@@ -98,7 +131,7 @@ When you use `--voice-theme` with `dub` or `speak`, the generated profile is aut
 
 ---
 
-## Option 2: Use a Built-in Profile
+## Option 3: Use a Built-in Profile
 
 Profiles are hosted on HuggingFace at [`bakrianoo/mazinger-dubber-profiles`](https://huggingface.co/datasets/bakrianoo/mazinger-dubber-profiles) and downloaded on first use. Files are cached in `/tmp/mazinger-dubber-profiles/` and reused on subsequent calls. Non-WAV voice files are automatically converted to 16-kHz mono WAV for TTS compatibility.
 
@@ -165,7 +198,7 @@ voice_path, script_path = fetch_profile("./my-profile")
 
 ---
 
-## Option 3: Use Your Own Custom Voice
+## Option 4: Use Your Own Custom Voice
 
 If you have your own voice recording, you can use it directly — no profile upload required.
 
