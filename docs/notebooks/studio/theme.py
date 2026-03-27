@@ -221,11 +221,21 @@ footer { display: none !important; }
 }
 
 /* ── Tabs inside accordion ──────────────────────────────────────── */
+.gradio-tab-nav {
+    flex-wrap: wrap !important;
+    overflow: visible !important;
+}
+/* hide the overflow "…" toggle */
+.gradio-tab-nav .tab-nav-overflow {
+    display: none !important;
+}
 .gradio-tab-nav button {
     color: #94a3b8 !important;
-    font-size: 0.82rem !important;
+    font-size: 0.78rem !important;
+    padding: 0.4rem 0.65rem !important;
     border: none !important;
     background: transparent !important;
+    white-space: nowrap !important;
 }
 .gradio-tab-nav button.selected {
     color: #60a5fa !important;
