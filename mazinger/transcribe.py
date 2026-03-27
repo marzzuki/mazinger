@@ -351,6 +351,7 @@ def _transcribe_faster_whisper(
     compute_type: str = "float16",
     language: str | None = None,
     beam_size: int = 5,
+    vad_options: dict | None = None,
 ) -> tuple[list[dict], str]:
     """Transcribe using faster-whisper (CTranslate2).
 
@@ -398,17 +399,79 @@ def _transcribe_faster_whisper(
                 whisper_model = WhisperModel(model, device=device, compute_type=compute_type)
         _whisper_cache[cache_key] = whisper_model
 
+    # ── Pre-compute VAD clips and apply head/tail guards ──────────
+    # We run Silero VAD ourselves so we can insert extra clips for any
+    # audio the VAD dropped at the start or end of the file (e.g.
+    # when background music lowers speech probability).
+    from faster_whisper.audio import decode_audio
+    from faster_whisper.vad import get_speech_timestamps, VadOptions
+
+    sampling_rate = whisper_model.feature_extractor.sampling_rate
+    audio = decode_audio(audio_path, sampling_rate=sampling_rate)
+    audio_samples = audio.shape[0]
+    duration_s = audio_samples / sampling_rate
+
+    chunk_length = whisper_model.feature_extractor.chunk_length
+    # Start with the same defaults the batched pipeline uses internally,
+    # then layer any caller-supplied overrides on top.
+    vad_kw: dict = {
+        "max_speech_duration_s": chunk_length,
+        "min_silence_duration_ms": 160,
+    }
+    if vad_options:
+        vad_kw.update(vad_options)
+    vad_params = VadOptions(**vad_kw)
+
+    speech_clips = get_speech_timestamps(audio, vad_params)
+
+    # Guard: add extra clips for head/tail gaps the VAD missed.
+    # We add *separate* clips (not extend existing ones) so each
+    # clip stays under the 30s chunk_length limit.
+    _GUARD_THRESHOLD_S = 1.0
+    guard_samples = int(_GUARD_THRESHOLD_S * sampling_rate)
+
+    if speech_clips:
+        # Head guard — add a clip covering [0, first_clip_start)
+        head_gap = speech_clips[0]["start"]
+        if head_gap > guard_samples:
+            log.info(
+                "Head guard: adding %.1fs clip before first VAD segment",
+                head_gap / sampling_rate,
+            )
+            speech_clips.insert(0, {"start": 0, "end": speech_clips[0]["start"]})
+
+        # Tail guard — add a clip covering (last_clip_end, audio_end]
+        tail_gap = audio_samples - speech_clips[-1]["end"]
+        if tail_gap > guard_samples:
+            log.info(
+                "Tail guard: adding %.1fs clip after last VAD segment",
+                tail_gap / sampling_rate,
+            )
+            speech_clips.append({"start": speech_clips[-1]["end"], "end": audio_samples})
+    else:
+        # No speech detected at all — transcribe the full audio
+        log.info("VAD detected no speech — transcribing full audio")
+        speech_clips = [{"start": 0, "end": audio_samples}]
+
+    # Convert from sample indices to seconds (the batched pipeline
+    # expects seconds when clip_timestamps is provided externally).
+    speech_clips_sec = [
+        {"start": c["start"] / sampling_rate, "end": c["end"] / sampling_rate}
+        for c in speech_clips
+    ]
+
     # Use batched inference for better performance
     batched_model = BatchedInferencePipeline(model=whisper_model)
 
-    # Transcribe with word-level timestamps and VAD filtering
+    # Transcribe with pre-computed (guarded) VAD clips.
+    # Passing clip_timestamps bypasses the pipeline's internal VAD.
     segments_gen, info = batched_model.transcribe(
-        audio_path,
+        audio,
         batch_size=batch_size,
         language=language,
         beam_size=beam_size,
         word_timestamps=True,
-        vad_filter=True,
+        clip_timestamps=speech_clips_sec,
     )
 
     detected_lang = info.language or "unknown"
@@ -591,6 +654,7 @@ def transcribe(
     llm_model: str = "gpt-4.1",
     openai_api_key: str | None = None,
     openai_base_url: str | None = None,
+    vad_options: dict | None = None,
 ) -> str:
     """Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, or WhisperX.
 
@@ -650,6 +714,7 @@ def transcribe(
             compute_type=compute_type,
             language=language,
             beam_size=beam_size,
+            vad_options=vad_options,
         )
     elif method == "whisperx":
         default_model = "large-v3"

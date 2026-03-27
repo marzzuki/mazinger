@@ -10,7 +10,6 @@ from typing import Any, Literal
 
 import numpy as np
 import soundfile as sf
-from tqdm.auto import tqdm
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +74,12 @@ class TTSWrapper(abc.ABC):
         The default implementation loops sequentially.  Engines with native
         batch support (e.g. vLLM-Omni) override this for parallel decoding.
         """
-        return [self.synthesize(t, lang) for t, lang in tqdm(items, desc="Synthesising")]
+        total = len(items)
+        results = []
+        for i, (t, lang) in enumerate(items, 1):
+            log.info("Synthesising segment %d/%d", i, total)
+            results.append(self.synthesize(t, lang))
+        return results
 
     @abc.abstractmethod
     def unload(self) -> None:
@@ -486,12 +490,14 @@ class _VllmOmniTTSWrapper(TTSWrapper):
         for _, lang in items:
             validate_language(lang)
         requests = [self._build_request(text, lang) for text, lang in items]
-        log.info("Batch-synthesising %d segments via vLLM-Omni", len(requests))
+        total = len(requests)
+        log.info("Batch-synthesising %d segments via vLLM-Omni", total)
         results: dict[str, tuple[np.ndarray, int]] = {}
         for stage_out in self._omni.generate(requests):
             out = stage_out.request_output
             mm = out.outputs[0].multimodal_output
             results[out.request_id] = self._extract_audio(mm)
+            log.info("Synthesising segment %d/%d (vLLM-Omni)", len(results), total)
         return [results[str(i)] for i in range(len(items))]
 
     def unload(self) -> None:
@@ -654,6 +660,8 @@ def synthesize_segments(
 
     # Synthesize all pending segments (batch when the engine supports it)
     if pending:
+        log.info("TTS: %d segments to synthesize (%d cached)",
+                 len(pending), len(srt_entries) - len(pending))
         use_wrapper = isinstance(voice_prompt, TTSWrapper)
         items = [(text, language) for _, text, _ in pending]
 
@@ -661,8 +669,10 @@ def synthesize_segments(
             results = voice_prompt.synthesize_batch(items)
         else:
             # Legacy Qwen API (backward compatibility)
+            total = len(items)
             results = []
-            for text, lang in tqdm(items, desc="Synthesising"):
+            for i, (text, lang) in enumerate(items, 1):
+                log.info("Synthesising segment %d/%d", i, total)
                 wavs, sr = model.generate_voice_clone(
                     text=text, language=lang, voice_clone_prompt=voice_prompt,
                 )

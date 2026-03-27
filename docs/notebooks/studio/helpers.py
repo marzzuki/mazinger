@@ -88,6 +88,7 @@ PHASE_PATTERNS = [
     ("TTS model kept in memory",    "⏳ Assembling final audio…"),
     ("assemble",                    "⏳ Assembling final audio…"),
     ("Synthesised",                 "⏳ Assembling final audio…"),
+    ("Synthesising segment",        "⏳ Synthesizing speech… (TTS)"),
     ("Synthesising",                "⏳ Synthesizing speech… (TTS)"),
     ("Loaded Qwen TTS",            "⏳ Synthesizing speech… (TTS)"),
     ("Loaded Chatterbox TTS",      "⏳ Synthesizing speech… (TTS)"),
@@ -134,6 +135,12 @@ def detect_phase(log_text: str) -> str:
     for line in reversed(lines):
         for pattern, label in PHASE_PATTERNS:
             if pattern in line:
+                # Enrich TTS status with segment progress numbers
+                if pattern == "Synthesising segment":
+                    import re
+                    m = re.search(r"Synthesising segment (\d+)/(\d+)", line)
+                    if m:
+                        return f"⏳ Synthesizing speech… segment {m.group(1)}/{m.group(2)}"
                 return label
     return "⏳ Processing…"
 

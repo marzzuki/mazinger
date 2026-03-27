@@ -64,6 +64,18 @@ def _tempo_stretch(
     return data
 
 
+def _fade(audio: np.ndarray, sr: int, fade_ms: int = 30) -> np.ndarray:
+    """Apply a short fade-in and fade-out to avoid clicks at segment edges."""
+    fade_len = min(int(sr * fade_ms / 1000), len(audio) // 2)
+    if fade_len < 2:
+        return audio
+    audio = audio.copy()
+    ramp = np.linspace(0.0, 1.0, fade_len, dtype=np.float32)
+    audio[:fade_len] *= ramp
+    audio[-fade_len:] *= ramp[::-1]
+    return audio
+
+
 def assemble_timeline(
     segment_info: list[dict],
     original_duration: float,
@@ -75,6 +87,7 @@ def assemble_timeline(
     tempo_mode: str = "auto",
     fixed_tempo: float | None = None,
     max_tempo: float = 1.3,
+    crossfade_ms: int = 30,
 ) -> str:
     """Assemble per-segment TTS WAVs into a single time-aligned audio file.
 
@@ -96,6 +109,8 @@ def assemble_timeline(
         fixed_tempo:       Tempo rate applied to all segments when
                            ``tempo_mode="fixed"`` (e.g. 1.1).
         max_tempo:         Upper speed limit for dynamic/auto mode (default 1.3).
+        crossfade_ms:      Fade-in/out duration (ms) applied to each segment edge
+                           to prevent clicks and smooth overlaps (default 30).
 
     Returns:
         The *output_path*.
@@ -108,14 +123,24 @@ def assemble_timeline(
     stats = {"sped_up": 0, "slowed_down": 0, "ok": 0, "skipped": 0, "truncated": 0}
     overflow_total = 0.0
 
-    for seg in tqdm(segment_info, desc="Aligning"):
-        if seg["wav_path"] is None:
-            stats["skipped"] += 1
-            continue
+    # Pre-sort segments by start time so we can look ahead to the next one
+    valid_segs = [s for s in segment_info if s.get("wav_path") is not None]
+    valid_segs.sort(key=lambda s: s["start"])
 
+    for seg_i, seg in enumerate(tqdm(valid_segs, desc="Aligning")):
         target_dur = seg["target_dur"]
-        target_samps = int(target_dur * sample_rate)
         start_samp = int(seg["start"] * sample_rate)
+
+        # ── Compute effective budget: target_dur + gap to next segment ──
+        # This lets a slightly-overflowing segment bleed into the natural
+        # silence gap instead of being hard-truncated.
+        if seg_i + 1 < len(valid_segs):
+            next_start = valid_segs[seg_i + 1]["start"]
+            gap_to_next = max(0.0, next_start - seg["end"])
+        else:
+            gap_to_next = max(0.0, original_duration - seg["end"])
+        budget_dur = target_dur + gap_to_next
+        budget_samps = int(budget_dur * sample_rate)
 
         raw_audio = _load_and_resample(seg["wav_path"], sample_rate)
         actual_dur = len(raw_audio) / sample_rate
@@ -137,14 +162,18 @@ def assemble_timeline(
                 audio = _tempo_stretch(seg["wav_path"], effective_ratio, stretched_path, sample_rate)
                 stats["sped_up"] += 1
                 if effective_ratio < speed_ratio:
-                    overflow_secs = actual_dur / effective_ratio - target_dur
-                    overflow_total += max(0, overflow_secs)
-                    log.warning(
-                        "Seg %s: TTS=%.2fs > target=%.2fs, capped speed-up at %.2fx "
-                        "(needed %.2fx) — %.2fs will be truncated",
-                        seg["idx"], actual_dur, target_dur,
-                        effective_ratio, speed_ratio, max(0, overflow_secs),
-                    )
+                    # After tempo, check overflow against the BUDGET (not just target)
+                    stretched_dur = actual_dur / effective_ratio
+                    overflow_secs = max(0, stretched_dur - budget_dur)
+                    overflow_total += overflow_secs
+                    if overflow_secs > 0:
+                        log.warning(
+                            "Seg %s: TTS=%.2fs > target=%.2fs (budget=%.2fs), "
+                            "capped speed-up at %.2fx (needed %.2fx) — "
+                            "%.2fs will be truncated",
+                            seg["idx"], actual_dur, target_dur, budget_dur,
+                            effective_ratio, speed_ratio, overflow_secs,
+                        )
             elif tempo_mode == "dynamic" and speed_ratio < 1.0 - speed_threshold:
                 # "auto" mode only speeds up; never slows down
                 effective_ratio = max(speed_ratio, min_speed_ratio)
@@ -157,26 +186,40 @@ def assemble_timeline(
         else:
             # tempo_mode == "off"
             if speed_ratio > 1.0 + speed_threshold:
-                overflow_secs = actual_dur - target_dur
-                overflow_total += overflow_secs
-                log.warning(
-                    "Seg %s: TTS=%.2fs > target=%.2fs (overflow %.2fs, will be truncated). "
-                    "Consider using --dynamic-tempo or tempo_mode='auto'.",
-                    seg["idx"], actual_dur, target_dur, overflow_secs,
-                )
-                stats["truncated"] += 1
+                overflow_secs = max(0, actual_dur - budget_dur)
+                if overflow_secs > 0:
+                    overflow_total += overflow_secs
+                    log.warning(
+                        "Seg %s: TTS=%.2fs > target=%.2fs (budget=%.2fs, overflow %.2fs, "
+                        "will be truncated). Consider using tempo_mode='auto'.",
+                        seg["idx"], actual_dur, target_dur, budget_dur, overflow_secs,
+                    )
+                    stats["truncated"] += 1
+                else:
+                    stats["ok"] += 1
             else:
                 stats["ok"] += 1
             audio = raw_audio
 
-        if len(audio) > target_samps:
-            audio = audio[:target_samps]
-        elif len(audio) < target_samps:
-            audio = np.pad(audio, (0, target_samps - len(audio)))
+        # ── Fit audio to the budget window, apply fades ──────────────
+        if len(audio) > budget_samps:
+            audio = audio[:budget_samps]
+        # Apply fade-in/out to avoid clicks at segment boundaries
+        audio = _fade(audio, sample_rate, crossfade_ms)
 
+        # ── Place on timeline with additive overlap (crossfade) ──────
         end_samp = min(start_samp + len(audio), total_samples)
         actual_len = end_samp - start_samp
-        timeline[start_samp:end_samp] = audio[:actual_len]
+        timeline[start_samp:end_samp] += audio[:actual_len]
+
+    # Count segments that had no WAV at all
+    stats["skipped"] = len(segment_info) - len(valid_segs)
+
+    # Clip to [-1, 1] in case additive overlap caused peaks > 1.0
+    peak = np.max(np.abs(timeline))
+    if peak > 1.0:
+        log.info("Clipping peak %.2f to 1.0 (from segment overlap)", peak)
+        np.clip(timeline, -1.0, 1.0, out=timeline)
 
     sf.write(output_path, timeline, sample_rate)
 
