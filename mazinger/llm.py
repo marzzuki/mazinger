@@ -163,7 +163,24 @@ class _OllamaClient:
     """Drop-in replacement for ``openai.OpenAI`` that talks native Ollama."""
 
     def __init__(self, base_url: str, think: bool | None) -> None:
+        self._base_url = base_url
         self.chat = _OllamaChat(_OllamaChatCompletions(base_url, think))
+
+    def unload_model(self, model: str) -> None:
+        """Tell Ollama to unload *model* from GPU memory."""
+        body = json.dumps({
+            "model": model, "keep_alive": 0,
+        }).encode()
+        req = urllib.request.Request(
+            f"{self._base_url}/api/generate", body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+            log.info("Ollama model %s unloaded from GPU", model)
+        except Exception:
+            log.debug("Ollama unload request failed (non-critical)", exc_info=True)
 
 
 # -- Factory ---------------------------------------------------------------

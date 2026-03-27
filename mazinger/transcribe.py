@@ -28,6 +28,19 @@ TranscribeMethod = Literal["openai", "faster-whisper", "whisperx"]
 _whisper_cache: dict[str, Any] = {}
 
 
+def clear_cache() -> None:
+    """Remove all cached Whisper models and free GPU memory."""
+    if not _whisper_cache:
+        return
+    import torch
+
+    _whisper_cache.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    log.info("Whisper model cache cleared, GPU memory freed.")
+
+
 # ── SRT formatting (self-contained so this module has no intra-package deps) ──
 
 def _fmt_srt_time(s: float) -> str:

@@ -255,6 +255,8 @@ class MazingerDubber:
                 skip_resegment=not use_resegmented,
             )
 
+        transcribe.clear_cache()
+
         # 3. Extract thumbnails ------------------------------------------
         source_srt_for_pipeline = proj.source_srt if use_resegmented else proj.source_raw_srt
         log.info("Using %s SRT for translation/dubbing: %s",
@@ -363,6 +365,9 @@ class MazingerDubber:
             )
             with open(proj.final_srt, "w", encoding="utf-8") as fh:
                 fh.write(resegmented)
+
+        if hasattr(client, 'unload_model'):
+            client.unload_model(self.llm_model)
 
         # 7. TTS ---------------------------------------------------------
         # Use the resegmented SRT (merged phrases) so TTS doesn't produce
