@@ -45,6 +45,7 @@ def describe_content(
     client: OpenAI,
     *,
     llm_model: str = "gpt-4.1",
+    video_meta: dict | None = None,
     usage_tracker: LLMUsageTracker | None = None,
 ) -> dict:
     """Send thumbnails and the full SRT to an LLM for content analysis.
@@ -67,6 +68,30 @@ def describe_content(
         log.info("Sampled %d/%d thumbnails for description", MAX_IMAGES, len(thumb_paths))
 
     user_parts: list[dict] = []
+
+    # Inject video metadata (title, description, tags, etc.) when available.
+    if video_meta:
+        meta_lines = []
+        if video_meta.get("title"):
+            meta_lines.append(f"Title: {video_meta['title']}")
+        if video_meta.get("description"):
+            # Truncate very long descriptions to avoid overwhelming the prompt.
+            desc = video_meta["description"]
+            if len(desc) > 1000:
+                desc = desc[:1000] + "…"
+            meta_lines.append(f"Description: {desc}")
+        if video_meta.get("uploader") or video_meta.get("channel"):
+            meta_lines.append(f"Channel: {video_meta.get('channel') or video_meta.get('uploader')}")
+        if video_meta.get("tags"):
+            meta_lines.append(f"Tags: {', '.join(video_meta['tags'][:20])}")
+        if video_meta.get("categories"):
+            meta_lines.append(f"Categories: {', '.join(video_meta['categories'])}")
+        if meta_lines:
+            user_parts.append({
+                "type": "text",
+                "text": "VIDEO METADATA:\n" + "\n".join(meta_lines) + "\n",
+            })
+
     for tp in thumb_paths:
         user_parts.append({"type": "text", "text": f"[{tp['timestamp']}] {tp['reason']}"})
         user_parts.append(make_image_content(tp["path"]))

@@ -164,9 +164,10 @@ class MazingerDubber:
 
         # -- Resolve project paths ----------------------------------------
         is_remote = download.is_url(source)
+        _yt_info: dict | None = None
         if slug is None:
             if is_remote:
-                slug, _ = download.resolve_slug(
+                slug, _yt_info = download.resolve_slug(
                     source,
                     cookies_from_browser=cookies_from_browser,
                     cookies=cookies,
@@ -175,6 +176,21 @@ class MazingerDubber:
                 slug = download.slug_from_path(source)
         proj = ProjectPaths(slug, base_dir=self.base_dir, target_language=target_language).ensure_dirs()
         log.info("Project: %s  Language: %s", proj.root, target_language)
+
+        # -- Save video metadata when available ---------------------------
+        if _yt_info and not os.path.exists(proj.video_meta):
+            download.save_video_meta(_yt_info, proj.video_meta)
+        video_meta: dict | None = None
+        if os.path.exists(proj.video_meta):
+            video_meta = load_json(proj.video_meta)
+
+        # -- Download YouTube subtitles (original + target language) ------
+        if _yt_info:
+            download.download_youtube_subtitles(
+                _yt_info,
+                proj.youtube_subs_dir,
+                target_languages=[target_language],
+            )
 
         # -- Resolve voice (theme / profile / explicit sample+script) -----
         if voice_theme and not (voice_sample and voice_script):
@@ -257,14 +273,38 @@ class MazingerDubber:
 
         transcribe.clear_cache()
 
-        # 3. Extract thumbnails ------------------------------------------
+        # 2b. Select best SRT source (ASR vs YouTube) --------------------
         source_srt_for_pipeline = proj.source_srt if use_resegmented else proj.source_raw_srt
+
+        yt_orig_srt = None
+        for fname in os.listdir(proj.youtube_subs_dir) if os.path.isdir(proj.youtube_subs_dir) else []:
+            if fname.endswith("-orig.srt") or fname.endswith("-orig.manual.srt"):
+                yt_orig_srt = os.path.join(proj.youtube_subs_dir, fname)
+                break
+
+        if yt_orig_srt and os.path.exists(source_srt_for_pipeline):
+            from mazinger.review import select_srt
+            with open(source_srt_for_pipeline, encoding="utf-8") as fh:
+                asr_text = fh.read()
+            with open(yt_orig_srt, encoding="utf-8") as fh:
+                yt_text = fh.read()
+            choice = select_srt(
+                asr_text, yt_text, client,
+                llm_model=self.llm_model,
+                video_meta=video_meta,
+                usage_tracker=usage_tracker,
+            )
+            if choice == "B":
+                source_srt_for_pipeline = yt_orig_srt
+                log.info("Using YouTube SRT as primary source: %s", yt_orig_srt)
+
         log.info("Using %s SRT for translation/dubbing: %s",
                  "resegmented" if use_resegmented else "raw",
                  source_srt_for_pipeline)
         with open(source_srt_for_pipeline, encoding="utf-8") as fh:
             source_srt_text = fh.read()
 
+        # 3. Extract thumbnails ------------------------------------------
         has_video = os.path.exists(proj.video)
 
         if not has_video:
@@ -294,6 +334,7 @@ class MazingerDubber:
             description = describe.describe_content(
                 source_srt_text, thumb_paths, client,
                 llm_model=self.llm_model,
+                video_meta=video_meta,
                 usage_tracker=usage_tracker,
             )
             save_json(description, proj.description)
@@ -311,6 +352,7 @@ class MazingerDubber:
                     llm_model=self.llm_model,
                     source_language=source_language,
                     keep_technical_english=keep_technical_english,
+                    video_meta=video_meta,
                     usage_tracker=usage_tracker,
                 )
                 with open(proj.reviewed_srt, "w", encoding="utf-8") as fh:
@@ -348,6 +390,7 @@ class MazingerDubber:
                 source_language=source_language,
                 target_language=target_language,
                 translate_technical_terms=translate_technical_terms,
+                video_meta=video_meta,
                 usage_tracker=usage_tracker,
                 **(dict(words_per_second=words_per_second) if words_per_second is not None else {}),
                 **(dict(duration_budget=duration_budget) if duration_budget is not None else {}),

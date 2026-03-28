@@ -299,6 +299,7 @@ def _build_messages(
     context_before: str = "",
     context_after: str = "",
     target_language: str = "English",
+    video_meta: dict | None = None,
 ) -> list[dict]:
     msgs = [{"role": "system", "content": system_prompt}]
     user_parts: list[dict] = []
@@ -306,8 +307,21 @@ def _build_messages(
     ctx = (
         "VIDEO CONTEXT:\n"
         f"Keypoints: {'; '.join(keypoints)}\n"
-        f"Keywords: {', '.join(keywords)}\n\n"
+        f"Keywords: {', '.join(keywords)}\n"
     )
+    if video_meta:
+        if video_meta.get("title"):
+            ctx += f"Video title: {video_meta['title']}\n"
+        if video_meta.get("description"):
+            desc = video_meta["description"]
+            if len(desc) > 500:
+                desc = desc[:500] + "…"
+            ctx += f"Video description: {desc}\n"
+        if video_meta.get("channel") or video_meta.get("uploader"):
+            ctx += f"Channel: {video_meta.get('channel') or video_meta.get('uploader')}\n"
+        if video_meta.get("tags"):
+            ctx += f"Tags: {', '.join(video_meta['tags'][:15])}\n"
+    ctx += "\n"
     user_parts.append({"type": "text", "text": ctx})
 
     if batch_thumbs:
@@ -418,6 +432,7 @@ def translate_srt(
     words_per_second: float = WORDS_PER_SECOND,
     duration_budget: float = DURATION_BUDGET,
     translate_technical_terms: bool = False,
+    video_meta: dict | None = None,
     usage_tracker: LLMUsageTracker | None = None,
 ) -> str:
     """Translate an SRT file to the target language using batched LLM calls with visual context.
@@ -496,6 +511,7 @@ def translate_srt(
             system_prompt, batch_json, batch_thumbs,
             keypoints, keywords, context_before, context_after,
             target_language=target_language,
+            video_meta=video_meta,
         )
         resp = client.chat.completions.create(
             model=llm_model, temperature=0.3, messages=msgs,

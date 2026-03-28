@@ -26,6 +26,7 @@ def _build_system_prompt(
     description: dict,
     source_language: str = "auto",
     keep_technical_english: bool = False,
+    video_meta: dict | None = None,
 ) -> str:
     """
     Build a prompt optimized for small/quantized LLMs (e.g. Gemma3 4b).
@@ -57,6 +58,16 @@ def _build_system_prompt(
 
     # ── Context block (only if data exists) ──────────────────────────────────
     context_lines = []
+    if video_meta:
+        if video_meta.get("title"):
+            context_lines.append(f"Video title: {video_meta['title']}")
+        if video_meta.get("description"):
+            desc = video_meta["description"]
+            if len(desc) > 500:
+                desc = desc[:500] + "…"
+            context_lines.append(f"Video description: {desc}")
+        if video_meta.get("tags"):
+            context_lines.append(f"Tags: {', '.join(video_meta['tags'][:15])}")
     if summary:
         context_lines.append(f"Topic summary: {summary}")
     if kw_str:
@@ -197,6 +208,7 @@ def review_srt(
     llm_model: str = "gpt-4.1",
     source_language: str = "auto",
     keep_technical_english: bool = False,
+    video_meta: dict | None = None,
     blocks_per_batch: int = BLOCKS_PER_BATCH,
     overlap_size: int = OVERLAP_SIZE,
     usage_tracker: LLMUsageTracker | None = None,
@@ -220,6 +232,7 @@ def review_srt(
         description,
         source_language=source_language,
         keep_technical_english=keep_technical_english,
+        video_meta=video_meta,
     )
 
     all_blocks = parse_blocks(srt_text)
@@ -278,3 +291,85 @@ def review_srt(
     result = blocks_to_text(reviewed_blocks)
     log.info("Review complete: %d entries", len(reviewed_blocks))
     return result
+
+
+# ── SRT source selection ─────────────────────────────────────────────────────
+
+_SELECT_PROMPT = """\
+You are given two SRT subtitle transcriptions of the same video.
+
+SOURCE A — produced by an ASR model (Whisper).
+SOURCE B — auto-generated or uploaded by the video platform (YouTube).
+
+Video metadata:
+{meta}
+
+Compare the two on these criteria:
+1. Language correctness — grammar, spelling, proper word boundaries
+2. Topic relevance — consistency with the video title/description/tags
+3. Timestamp accuracy — natural segment boundaries, no excessive overlap
+4. Completeness — coverage of the full audio without missing segments
+5. Readability — clean punctuation, no garbled or hallucinated text
+
+Return ONLY a JSON object (no markdown, no commentary):
+{{"choice": "A" or "B", "reason": "one sentence"}}"""
+
+
+def select_srt(
+    srt_a: str,
+    srt_b: str,
+    client,
+    *,
+    llm_model: str = "gpt-4.1",
+    video_meta: dict | None = None,
+    usage_tracker: LLMUsageTracker | None = None,
+) -> str:
+    """Ask an LLM to pick the better SRT between two candidates.
+
+    Returns ``"A"`` or ``"B"``.
+    """
+    meta_lines = []
+    if video_meta:
+        for k in ("title", "description", "channel", "tags"):
+            v = video_meta.get(k)
+            if v:
+                if isinstance(v, list):
+                    v = ", ".join(str(i) for i in v[:10])
+                meta_lines.append(f"{k}: {v}")
+    meta_block = "\n".join(meta_lines) if meta_lines else "(not available)"
+
+    # Truncate to keep prompt manageable.
+    max_chars = 4000
+    a_sample = srt_a[:max_chars]
+    b_sample = srt_b[:max_chars]
+
+    resp = client.chat.completions.create(
+        model=llm_model,
+        temperature=0.1,
+        think=False,
+        messages=[
+            {"role": "system", "content": _SELECT_PROMPT.format(meta=meta_block)},
+            {"role": "user", "content": (
+                f"=== SOURCE A (ASR) ===\n{a_sample}\n\n"
+                f"=== SOURCE B (YouTube) ===\n{b_sample}"
+            )},
+        ],
+        num_predict=128,
+    )
+    if usage_tracker is not None:
+        usage_tracker.record("select_srt", llm_model, resp)
+
+    raw = resp.choices[0].message.content.strip()
+    try:
+        result = json_repair.loads(raw)
+        choice = str(result.get("choice", "A")).upper()
+        reason = result.get("reason", "")
+    except Exception:
+        choice = "A"
+        reason = "parse error, defaulting to ASR"
+
+    if choice not in ("A", "B"):
+        choice = "A"
+
+    log.info("SRT selection: %s — %s", choice, reason)
+    return choice

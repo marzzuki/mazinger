@@ -11,6 +11,7 @@ class ProjectPaths:
     Directory layout under ``<base_dir>/projects/<slug>/``::
 
         source/              downloaded video + extracted audio   (shared)
+        source/youtube_subs/ subtitles downloaded from YouTube    (shared)
         transcription/       raw and processed SRT files          (shared)
         thumbnails/          extracted frames + metadata          (shared)
         analysis/            LLM-generated content description    (shared)
@@ -42,6 +43,7 @@ class ProjectPaths:
 
         # Shared directories
         self.source_dir = os.path.join(self.root, "source")
+        self.youtube_subs_dir = os.path.join(self.source_dir, "youtube_subs")
         self.transcription_dir = os.path.join(self.root, "transcription")
         self.thumbnails_dir = os.path.join(self.root, "thumbnails")
         self.analysis_dir = os.path.join(self.root, "analysis")
@@ -55,6 +57,7 @@ class ProjectPaths:
         # Shared file paths
         self.video = os.path.join(self.source_dir, "video.mp4")
         self.audio = os.path.join(self.source_dir, "audio.mp3")
+        self.video_meta = os.path.join(self.source_dir, "video_meta.json")
         self.source_srt = os.path.join(self.transcription_dir, "source.srt")
         self.source_raw_srt = os.path.join(self.transcription_dir, "source.raw.srt")
         self.thumbs_meta = os.path.join(self.thumbnails_dir, "meta.json")
@@ -75,6 +78,7 @@ class ProjectPaths:
         """Create all project sub-directories (idempotent)."""
         for d in (
             self.source_dir,
+            self.youtube_subs_dir,
             self.transcription_dir,
             self.subtitles_dir,
             self.thumbnails_dir,
@@ -94,6 +98,7 @@ class ProjectPaths:
         labels = {
             "source/video.mp4": self.video,
             "source/audio.mp3": self.audio,
+            "source/video_meta.json": self.video_meta,
             "transcription/source.srt": self.source_srt,
             "transcription/source.raw.srt": self.source_raw_srt,
             _rel(self.translated_raw_srt): self.translated_raw_srt,

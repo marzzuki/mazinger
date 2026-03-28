@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import yt_dlp
 
-from mazinger.utils import sanitize_filename
+from mazinger.utils import sanitize_filename, save_json
 
 log = logging.getLogger(__name__)
 
@@ -192,6 +192,190 @@ def resolve_slug(
     slug = sanitize_filename(title)
     log.info("Resolved slug: %s", slug)
     return slug, info
+
+
+# Keys to extract from the yt-dlp info dict for LLM context.
+_META_KEYS = (
+    "title", "description", "uploader", "channel", "upload_date",
+    "duration", "categories", "tags", "language",
+)
+
+# Map YouTube auto-caption language codes (with -orig suffix stripped)
+# to the language names used by Qwen TTS.
+_YT_CODE_TO_LANG: dict[str, str] = {
+    "zh-Hans": "Chinese", "zh-Hant": "Chinese",
+    "zh": "Chinese", "en": "English", "ja": "Japanese",
+    "ko": "Korean", "de": "German", "fr": "French",
+    "ru": "Russian", "pt": "Portuguese", "es": "Spanish",
+    "it": "Italian",
+    # Broader translate-supported languages
+    "ar": "Arabic", "bn": "Bengali", "cs": "Czech",
+    "da": "Danish", "nl": "Dutch", "fi": "Finnish",
+    "el": "Greek", "he": "Hebrew", "hi": "Hindi",
+    "hu": "Hungarian", "id": "Indonesian", "ms": "Malay",
+    "nb": "Norwegian", "no": "Norwegian", "fa": "Persian",
+    "pl": "Polish", "ro": "Romanian", "sv": "Swedish",
+    "th": "Thai", "tr": "Turkish", "uk": "Ukrainian",
+    "ur": "Urdu", "vi": "Vietnamese",
+}
+
+# Reverse: language name → preferred YouTube code (first wins).
+_LANG_TO_YT_CODE: dict[str, str] = {}
+for _c, _l in _YT_CODE_TO_LANG.items():
+    _LANG_TO_YT_CODE.setdefault(_l, _c)
+
+
+def _detect_original_language(info: dict) -> str | None:
+    """Detect the original spoken language from yt-dlp *info*.
+
+    Checks the ``*-orig`` key in ``automatic_captions``, then falls back to
+    the ``language`` field.
+    """
+    auto = info.get("automatic_captions") or {}
+    for code in auto:
+        if code.endswith("-orig"):
+            base = code[: -len("-orig")]
+            return _YT_CODE_TO_LANG.get(base, base)
+    return info.get("language")
+
+
+def save_video_meta(info: dict, output_path: str) -> str:
+    """Extract useful video metadata from a yt-dlp *info* dict and save as JSON.
+
+    Stores a curated subset of fields — enough to give LLMs useful context
+    without leaking private or overly verbose data.  Also records the
+    detected original language, available manual subtitles, and auto-caption
+    language codes.
+
+    Returns *output_path*.
+    """
+    meta = {k: info[k] for k in _META_KEYS if info.get(k) is not None}
+    if not meta:
+        log.debug("No video metadata to save")
+        return output_path
+
+    # Derived fields
+    orig_lang = _detect_original_language(info)
+    if orig_lang:
+        meta["original_language"] = orig_lang
+
+    manual_subs = list((info.get("subtitles") or {}).keys())
+    if manual_subs:
+        meta["available_subtitles"] = manual_subs
+
+    auto_codes = list((info.get("automatic_captions") or {}).keys())
+    if auto_codes:
+        meta["available_auto_captions"] = auto_codes
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    save_json(meta, output_path)
+    log.info("Video metadata saved: %s", output_path)
+    return output_path
+
+
+# ── YouTube subtitle download ───────────────────────────────────────────────
+
+
+def _subtitle_url(info: dict, lang_code: str, fmt: str = "srt") -> str | None:
+    """Return the download URL for *lang_code* in *fmt*, or ``None``.
+
+    Checks manual subtitles first, then automatic captions.
+    """
+    for bucket in ("subtitles", "automatic_captions"):
+        tracks = (info.get(bucket) or {}).get(lang_code, [])
+        for entry in tracks:
+            if entry.get("ext") == fmt:
+                return entry["url"]
+    return None
+
+
+def _download_subtitle_url(url: str, dest: str) -> str:
+    """Download a subtitle file from *url* to *dest*."""
+    import urllib.request
+
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req) as resp, open(dest, "wb") as out:
+        out.write(resp.read())
+    return dest
+
+
+def download_youtube_subtitles(
+    info: dict,
+    output_dir: str,
+    *,
+    target_languages: list[str] | None = None,
+) -> dict[str, str]:
+    """Download available YouTube subtitles into *output_dir*.
+
+    Always downloads the **original-language** track (the ``*-orig``
+    auto-caption) when available.  Additionally downloads any tracks
+    whose language matches *target_languages* (language names like
+    ``"English"``, ``"Arabic"``).  When *target_languages* is ``None``,
+    downloads tracks for all languages in ``_YT_CODE_TO_LANG``.
+
+    Manual (creator-uploaded) subtitles are preferred over auto-generated
+    ones.  Files are saved as ``<lang_code>.srt`` (auto-generated) or
+    ``<lang_code>.manual.srt`` (creator-uploaded).
+
+    Returns:
+        A dict mapping ``"<lang_code>"`` → absolute file path for each
+        successfully downloaded subtitle.
+    """
+    manual_tracks = info.get("subtitles") or {}
+    auto_tracks = info.get("automatic_captions") or {}
+    all_codes: set[str] = set()
+
+    # 1. Always include the original-language track.
+    for code in auto_tracks:
+        if code.endswith("-orig"):
+            all_codes.add(code)
+            # Also include the base code (e.g. "ar" alongside "ar-orig").
+            all_codes.add(code[: -len("-orig")])
+            break
+
+    # 2. Determine which target language codes to download.
+    if target_languages is None:
+        wanted_codes = set(_YT_CODE_TO_LANG.keys())
+    else:
+        wanted_codes = set()
+        for lang_name in target_languages:
+            code = _LANG_TO_YT_CODE.get(lang_name)
+            if code:
+                wanted_codes.add(code)
+
+    # Only keep codes that actually exist in the info dict.
+    for code in wanted_codes:
+        if code in manual_tracks or code in auto_tracks:
+            all_codes.add(code)
+
+    if not all_codes:
+        log.info("No matching YouTube subtitles to download")
+        return {}
+
+    os.makedirs(output_dir, exist_ok=True)
+    downloaded: dict[str, str] = {}
+
+    for code in sorted(all_codes):
+        is_manual = code in manual_tracks
+        url = _subtitle_url(info, code)
+        if not url:
+            continue
+        suffix = ".manual.srt" if is_manual else ".srt"
+        dest = os.path.join(output_dir, f"{code}{suffix}")
+        if os.path.exists(dest):
+            log.debug("YouTube subtitle already cached: %s", dest)
+            downloaded[code] = dest
+            continue
+        try:
+            _download_subtitle_url(url, dest)
+            tag = "manual" if is_manual else "auto"
+            log.info("Downloaded YouTube subtitle [%s] (%s): %s", code, tag, dest)
+            downloaded[code] = dest
+        except Exception as exc:
+            log.warning("Failed to download subtitle [%s]: %s", code, exc)
+
+    return downloaded
 
 
 def download_video(
