@@ -199,6 +199,21 @@ def add_tempo(p: argparse.ArgumentParser) -> None:
                    help="Maximum speed-up factor for dynamic tempo (default: 1.5).")
 
 
+def add_segment_mode(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--segment-mode", choices=["short", "long", "auto"], default="short",
+        help=(
+            "Segmentation strategy: 'short' (default) uses LLM resegmentation, "
+            "'long' merges into 8-30s chunks for better TTS prosody (no LLM cost), "
+            "'auto' picks based on median segment duration."
+        ),
+    )
+    p.add_argument("--min-segment-duration", type=float, default=8.0,
+                   help="Minimum chunk duration in seconds for 'long' mode (default: 8.0).")
+    p.add_argument("--max-segment-duration", type=float, default=30.0,
+                   help="Maximum chunk duration in seconds for 'long' mode (default: 30.0).")
+
+
 def add_transcription(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--transcribe-method", default="openai", choices=["openai", "faster-whisper", "whisperx"],

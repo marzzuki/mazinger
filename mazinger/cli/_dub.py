@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 
 from mazinger.cli._groups import (
-    add_common, add_llm, add_slice, add_source, add_subtitles, add_tempo,
-    add_tts_engine, add_transcription, add_translation, add_voice,
+    add_common, add_llm, add_segment_mode, add_slice, add_source,
+    add_subtitles, add_tempo, add_tts_engine, add_transcription,
+    add_translation, add_voice,
     resolve_voice, subtitle_style_from_args, tempo_mode_from_args,
 )
 
@@ -26,6 +27,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="Output type: 'audio' (default) or 'video'.")
     add_subtitles(p)
     add_tempo(p)
+    add_segment_mode(p)
     add_translation(p)
     p.add_argument("--asr-review", action="store_true", default=False,
                    help="Review ASR transcript with LLM to fix typos and punctuation.")
@@ -85,6 +87,9 @@ def handler(args: argparse.Namespace) -> None:
         end=args.end,
         force_reset=args.force_reset,
         use_resegmented=args.use_resegmented,
+        segment_mode=args.segment_mode,
+        min_segment_duration=args.min_segment_duration,
+        max_segment_duration=args.max_segment_duration,
         output_type=args.output_type,
         tempo_mode=tempo_mode_from_args(args),
         fixed_tempo=args.fixed_tempo,

@@ -89,6 +89,9 @@ class MazingerDubber:
         skip_existing: bool = True,
         force_reset: bool = False,
         use_resegmented: bool = False,
+        segment_mode: str = "short",
+        min_segment_duration: float = 8.0,
+        max_segment_duration: float = 30.0,
         tempo_mode: str = "auto",
         fixed_tempo: float | None = None,
         max_tempo: float = 1.5,
@@ -156,7 +159,7 @@ class MazingerDubber:
         """
         from mazinger import download, transcribe, thumbnails, describe
         from mazinger import translate, resegment, tts, assemble
-        from mazinger.srt import parse_file
+        from mazinger.srt import parse_file, parse_blocks
 
         if tts_language is None:
             tts_language = target_language
@@ -408,8 +411,25 @@ class MazingerDubber:
                 fh.write(translated_srt)
 
         # 6. Re-segment --------------------------------------------------
+        effective_mode = segment_mode
+        if segment_mode == "auto":
+            src_blocks = parse_blocks(translated_srt)
+            durs = sorted(e - s for _, s, e, _ in src_blocks) if src_blocks else [5.0]
+            median_dur = durs[len(durs) // 2]
+            effective_mode = "long" if median_dur < 3.0 else "short"
+            log.info("Auto segment mode: median=%.1fs -> %s", median_dur, effective_mode)
+
         if skip_existing and os.path.exists(proj.final_srt):
             log.info("Skipping re-segmentation (file exists)")
+        elif effective_mode == "long":
+            resegmented = resegment.merge_long_segments(
+                translated_srt,
+                source_audio=proj.audio,
+                min_duration=min_segment_duration,
+                max_duration=max_segment_duration,
+            )
+            with open(proj.final_srt, "w", encoding="utf-8") as fh:
+                fh.write(resegmented)
         else:
             resegmented = resegment.resegment_srt(
                 translated_srt, client=client, llm_model=self.llm_model,
@@ -473,7 +493,14 @@ class MazingerDubber:
             elif subtitle_style:
                 from mazinger.subtitle import burn_subtitles
                 if subtitle_source == "translated":
-                    srt_path = proj.final_srt
+                    # Prefer the pre-merged SRT for on-screen display;
+                    # final_srt may contain long merged chunks unsuitable
+                    # for readable subtitles.
+                    srt_path = (
+                        proj.translated_raw_srt
+                        if os.path.exists(proj.translated_raw_srt)
+                        else proj.final_srt
+                    )
                 elif subtitle_source == "original":
                     srt_path = proj.source_srt
                 else:

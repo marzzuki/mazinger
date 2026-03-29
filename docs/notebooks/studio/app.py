@@ -4,7 +4,7 @@ import gradio as gr
 
 from constants import (
     LANGUAGES, VOICE_PRESETS, METHOD_MAP, OLLAMA_DEFAULT_MODEL,
-    THEME_CHOICES, VOICE_THEMES,
+    SEGMENT_MODE_MAP, THEME_CHOICES, VOICE_THEMES,
 )
 from theme import theme, CSS
 from helpers import free_gpu_and_restart_ollama
@@ -58,6 +58,22 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                 "Uses OpenAI Whisper for transcription and GPT for translation.",
                 elem_classes="openai-info",
             )
+            with gr.Accordion("🔌  API Override", open=False):
+                gr.Markdown(
+                    "*Override the provider settings above. "
+                    "Leave empty to use defaults.*",
+                    elem_classes="openai-info",
+                )
+                api_base_url = gr.Textbox(
+                    label="API Base URL",
+                    placeholder="https://api.openai.com/v1",
+                    value="https://api.openai.com/v1",
+                )
+                llm_model = gr.Textbox(
+                    label="LLM Model",
+                    placeholder="gpt-4.1",
+                    value="gpt-4.1",
+                )
 
     with gr.Row():
         gpu_btn = gr.Button(
@@ -253,54 +269,6 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                     value=False,
                 )
 
-            with gr.Tab("�🔌 API Override"):
-                gr.Markdown(
-                    "*Override the LLM provider settings above. "
-                    "Leave empty to use defaults.*",
-                    elem_classes="openai-info",
-                )
-                api_base_url = gr.Textbox(
-                    label="API Base URL",
-                    placeholder="Auto-set by LLM Provider selection",
-                )
-                llm_model = gr.Textbox(
-                    label="LLM Model",
-                    placeholder="Auto-set by LLM Provider selection",
-                )
-
-            with gr.Tab("📥 Download"):
-                quality = gr.Dropdown(
-                    ["Low (360p)", "Medium (720p)", "High (best)"],
-                    value="Medium (720p)",
-                    label="Video quality",
-                )
-                with gr.Row():
-                    start_time = gr.Textbox(
-                        label="Start time",
-                        placeholder="00:01:30 or 90",
-                    )
-                    end_time = gr.Textbox(
-                        label="End time",
-                        placeholder="00:05:00 or 300",
-                    )
-
-            with gr.Tab("📝 Transcription"):
-                transcribe_method = gr.Dropdown(
-                    list(METHOD_MAP.keys()),
-                    value="Faster Whisper (local GPU)",
-                    label="Transcription method",
-                    info="Cloud = needs OpenAI key  •  Local = faster, requires GPU",
-                )
-                whisper_model = gr.Textbox(
-                    label="Model override",
-                    placeholder="whisper-1 (cloud) / large-v3 (local)",
-                )
-                youtube_subs = gr.Checkbox(
-                    label="Use YouTube subtitles",
-                    value=False,
-                    info="Download YouTube captions and compare with ASR to pick the best source",
-                )
-
             with gr.Tab("🌐 Translation"):
                 source_language = gr.Dropdown(
                     ["Auto-detect"] + LANGUAGES,
@@ -345,6 +313,12 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                     1.0, 2.0, value=1.5, step=0.05,
                     label="Max tempo",
                 )
+                segment_mode = gr.Dropdown(
+                    ["Short", "Long (default)", "Auto"],
+                    value="Long (default)",
+                    label="Segment mode",
+                    info="Long mode merges text into 8-30s chunks for better voice quality",
+                )
                 with gr.Row():
                     loudness_match = gr.Checkbox(
                         label="Match original loudness",
@@ -352,11 +326,44 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                     )
                     mix_background = gr.Checkbox(
                         label="Mix background audio",
-                        value=True,
+                        value=False,
                     )
                 background_volume = gr.Slider(
                     0.0, 1.0, value=0.15, step=0.05,
                     label="Background volume",
+                )
+
+            with gr.Tab("📥 Download"):
+                quality = gr.Dropdown(
+                    ["Low (360p)", "Medium (720p)", "High (best)"],
+                    value="Medium (720p)",
+                    label="Video quality",
+                )
+                with gr.Row():
+                    start_time = gr.Textbox(
+                        label="Start time",
+                        placeholder="00:01:30 or 90",
+                    )
+                    end_time = gr.Textbox(
+                        label="End time",
+                        placeholder="00:05:00 or 300",
+                    )
+
+            with gr.Tab("📝 Transcription"):
+                transcribe_method = gr.Dropdown(
+                    list(METHOD_MAP.keys()),
+                    value="Faster Whisper (local GPU)",
+                    label="Transcription method",
+                    info="Cloud = needs OpenAI key  •  Local = faster, requires GPU",
+                )
+                whisper_model = gr.Textbox(
+                    label="Model override",
+                    placeholder="whisper-1 (cloud) / large-v3 (local)",
+                )
+                youtube_subs = gr.Checkbox(
+                    label="Use YouTube subtitles",
+                    value=False,
+                    info="Download YouTube captions and compare with ASR to pick the best source",
                 )
 
             with gr.Tab("📡 Streaming"):
@@ -513,7 +520,7 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             source_language, words_per_second, duration_budget, translate_technical,
             tts_engine,
             tts_dtype,
-            tempo_mode, max_tempo, loudness_match, mix_background, background_volume,
+            tempo_mode, max_tempo, segment_mode, loudness_match, mix_background, background_volume,
             output_type, force_reset,
             stream_llm,
             youtube_subs,

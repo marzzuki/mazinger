@@ -225,10 +225,14 @@ footer { display: none !important; }
     flex-wrap: wrap !important;
     overflow: visible !important;
 }
-/* hide the overflow "…" toggle */
-.gradio-tab-nav .tab-nav-overflow {
+/* hide the overflow "…" toggle and its dropdown */
+.gradio-tab-nav .tab-nav-overflow,
+.gradio-tab-nav .overflow-menu,
+.tab-nav-overflow,
+.overflow-menu {
     display: none !important;
 }
+/* force all tab buttons visible (no overflow) */
 .gradio-tab-nav button {
     color: #94a3b8 !important;
     font-size: 0.78rem !important;
@@ -240,6 +244,30 @@ footer { display: none !important; }
 .gradio-tab-nav button.selected {
     color: #60a5fa !important;
     border-bottom: 2px solid #3b82f6 !important;
+}
+/* fallback: style any overflow popup that still appears */
+.gradio-tab-nav [role="menu"],
+.gradio-tab-nav ul,
+.gradio-tab-nav .tab-overflow-menu,
+.tab-overflow-menu,
+div[class*="overflow"] {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+.gradio-tab-nav [role="menu"] button,
+.gradio-tab-nav ul button,
+.gradio-tab-nav .tab-overflow-menu button,
+.tab-overflow-menu button {
+    color: #e2e8f0 !important;
+    background: #1e293b !important;
+}
+.gradio-tab-nav [role="menu"] button:hover,
+.gradio-tab-nav ul button:hover,
+.tab-overflow-menu button:hover {
+    background: #334155 !important;
+    color: #ffffff !important;
 }
 
 /* ── Divider ────────────────────────────────────────────────────── */
