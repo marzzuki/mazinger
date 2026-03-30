@@ -61,5 +61,11 @@ METHOD_MAP = {
     "WhisperX (local GPU)": "whisperx",
 }
 
+SEGMENT_MODE_MAP = {
+    "Short": "short",
+    "Long (default)": "long",
+    "Auto": "auto",
+}
+
 import os
 OLLAMA_DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:2b-q8_0")

@@ -18,15 +18,19 @@ _nvenc_available: bool | None = None
 
 
 def _has_nvenc() -> bool:
-    """Check whether ffmpeg supports h264_nvenc (cached)."""
+    """Check whether ffmpeg can actually encode with h264_nvenc."""
     global _nvenc_available
     if _nvenc_available is None:
         try:
             r = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"],
-                capture_output=True, text=True, timeout=5,
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1",
+                    "-c:v", "h264_nvenc", "-f", "null", "-",
+                ],
+                capture_output=True, timeout=10,
             )
-            _nvenc_available = "h264_nvenc" in r.stdout
+            _nvenc_available = r.returncode == 0
         except Exception:
             _nvenc_available = False
     return _nvenc_available

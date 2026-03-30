@@ -75,7 +75,7 @@ def run_dubbing(
     source_language, words_per_second, duration_budget, translate_technical,
     tts_engine,
     tts_dtype,
-    tempo_mode, max_tempo, loudness_match, mix_background, background_volume,
+    tempo_mode, max_tempo, segment_mode, loudness_match, mix_background, background_volume,
     output_type, force_reset,
     stream_llm,
     youtube_subs=False,
@@ -142,7 +142,7 @@ def run_dubbing(
         source_language, words_per_second, duration_budget, translate_technical,
         tts_engine,
         tts_dtype,
-        tempo_mode, max_tempo, loudness_match, mix_background, background_volume,
+        tempo_mode, max_tempo, segment_mode, loudness_match, mix_background, background_volume,
         force_reset,
         stream_llm,
         youtube_subs,
@@ -246,9 +246,9 @@ def _run_subtitles(
 
             # 2. Transcribe
             if not (skip and os.path.exists(proj.source_srt)):
-                m = METHOD_MAP.get(transcribe_method, "faster-whisper")
+                m = METHOD_MAP.get(transcribe_method, "whisperx")
                 if is_ollama and m == "openai":
-                    m = "faster-whisper"
+                    m = "whisperx"
 
                 # Build initial prompt from video metadata (title, tags…)
                 from mazinger.transcribe import build_initial_prompt
@@ -360,8 +360,8 @@ def _run_subtitles(
                     source_language=source_language if source_language != "Auto-detect" else "auto",
                     target_language=target_language,
                     translate_technical_terms=translate_technical,
-                    **({"words_per_second": words_per_second} if words_per_second != 2.0 else {}),
-                    **({"duration_budget": duration_budget} if duration_budget != 0.80 else {}),
+                    **({"words_per_second": words_per_second} if words_per_second > 0 else {}),
+                    **({"duration_budget": duration_budget} if duration_budget != 0.85 else {}),
                 )
                 with open(proj.translated_raw_srt, "w", encoding="utf-8") as f:
                     f.write(translated)
@@ -412,7 +412,8 @@ def _run_subtitles(
     render_paths = {}
     proj = result.get("paths")
     if proj:
-        for attr in ("video", "final_srt", "source_srt"):
+        for attr in ("video", "final_srt", "source_srt",
+                      "translated_raw_srt"):
             p = getattr(proj, attr, None)
             if p and os.path.isfile(p):
                 render_paths[attr] = p
@@ -436,7 +437,7 @@ def _run_full_dub(
     source_language, words_per_second, duration_budget, translate_technical,
     tts_engine,
     tts_dtype,
-    tempo_mode, max_tempo, loudness_match, mix_background, background_volume,
+    tempo_mode, max_tempo, segment_mode, loudness_match, mix_background, background_volume,
     force_reset,
     stream_llm,
     youtube_subs=False,
@@ -544,15 +545,21 @@ def _run_full_dub(
                 dub_kw["end"] = end_time.strip()
             m = METHOD_MAP.get(transcribe_method)
             if is_ollama and m == "openai":
-                m = "faster-whisper"
+                m = "whisperx"
             if m:
                 dub_kw["transcribe_method"] = m
             if whisper_model and whisper_model.strip():
                 dub_kw["whisper_model"] = whisper_model.strip()
-            if words_per_second != 2.0:
+            if words_per_second > 0:
                 dub_kw["words_per_second"] = words_per_second
-            if duration_budget != 0.80:
+            if duration_budget != 0.85:
                 dub_kw["duration_budget"] = duration_budget
+
+            from constants import SEGMENT_MODE_MAP
+            _seg_mode = SEGMENT_MODE_MAP.get(segment_mode, "short")
+            if _seg_mode != "short":
+                dub_kw["segment_mode"] = _seg_mode
+
             paths = dubber.dub(**dub_kw)
             result["paths"] = paths
 
@@ -611,7 +618,8 @@ def _run_full_dub(
 
     render_paths = {}
     if paths:
-        for attr in ("video", "final_audio", "final_srt", "source_srt"):
+        for attr in ("video", "final_audio", "final_srt", "source_srt",
+                      "translated_raw_srt"):
             p = getattr(paths, attr, None)
             if p and os.path.isfile(p):
                 render_paths[attr] = p
@@ -646,7 +654,9 @@ def render_video(
 
     srt_path = None
     if use_translated_subs:
-        srt_path = render_paths.get("final_srt")
+        # Prefer pre-merged SRT for readable on-screen subtitles;
+        # final_srt may have long merged chunks from long-segment mode.
+        srt_path = render_paths.get("translated_raw_srt") or render_paths.get("final_srt")
     elif use_original_subs:
         srt_path = render_paths.get("source_srt")
 

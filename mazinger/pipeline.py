@@ -7,7 +7,11 @@ import os
 from typing import Any
 
 from mazinger.paths import ProjectPaths
-from mazinger.utils import save_json, load_json, get_audio_duration, LLMUsageTracker
+from mazinger.utils import (
+    save_json, load_json, get_audio_duration, LLMUsageTracker,
+    is_valid_media_file, is_valid_srt_file, is_valid_json_file,
+    is_valid_thumbs_meta,
+)
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ class MazingerDubber:
         voice_theme: str | None = None,
         slug: str | None = None,
         device: str = "cuda",
-        transcribe_method: str = "openai",
+        transcribe_method: str = "whisperx",
         whisper_model: str | None = None,
         beam_size: int = 5,
         tts_model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
@@ -79,7 +83,7 @@ class MazingerDubber:
         chatterbox_exaggeration: float = 0.5,
         chatterbox_cfg: float = 0.5,
         loudness_match: bool = True,
-        mix_background: bool = False,
+        mix_background: bool = True,
         background_volume: float = 0.15,
         cookies_from_browser: str | None = None,
         cookies: str | None = None,
@@ -89,9 +93,12 @@ class MazingerDubber:
         skip_existing: bool = True,
         force_reset: bool = False,
         use_resegmented: bool = False,
+        segment_mode: str = "short",
+        min_segment_duration: float = 8.0,
+        max_segment_duration: float = 30.0,
         tempo_mode: str = "auto",
         fixed_tempo: float | None = None,
-        max_tempo: float = 1.3,
+        max_tempo: float = 1.5,
         words_per_second: float | None = None,
         duration_budget: float | None = None,
         translate_technical_terms: bool = False,
@@ -156,7 +163,7 @@ class MazingerDubber:
         """
         from mazinger import download, transcribe, thumbnails, describe
         from mazinger import translate, resegment, tts, assemble
-        from mazinger.srt import parse_file
+        from mazinger.srt import parse_file, parse_blocks
 
         if tts_language is None:
             tts_language = target_language
@@ -233,11 +240,11 @@ class MazingerDubber:
 
         if is_local_audio:
             # Local audio file — copy into project, no video to process.
-            if not (skip_existing and os.path.exists(proj.audio)):
+            if not (skip_existing and is_valid_media_file(proj.audio)):
                 download.ingest_local_audio(source, proj.audio)
         elif is_remote:
             # URL — download video then extract audio.
-            if skip_existing and os.path.exists(proj.video):
+            if skip_existing and is_valid_media_file(proj.video):
                 log.info("Skipping download (video exists)")
             else:
                 download.download_video(
@@ -250,7 +257,7 @@ class MazingerDubber:
             download.extract_audio(proj.video, proj.audio)
         else:
             # Local video file — copy into project and extract audio.
-            if not (skip_existing and os.path.exists(proj.video)):
+            if not (skip_existing and is_valid_media_file(proj.video)):
                 download.ingest_local_video(source, proj.video, proj.audio)
             else:
                 download.extract_audio(proj.video, proj.audio)
@@ -260,7 +267,7 @@ class MazingerDubber:
             download.slice_project(proj, start=start, end=end)
 
         # 2. Transcribe --------------------------------------------------
-        if skip_existing and os.path.exists(proj.source_srt):
+        if skip_existing and is_valid_srt_file(proj.source_srt):
             log.info("Skipping transcription (SRT exists)")
         else:
             # Build an initial prompt from video metadata (title, tags, etc.)
@@ -321,7 +328,7 @@ class MazingerDubber:
         if not has_video:
             log.info("No video available — skipping thumbnail extraction")
             thumb_paths = []
-        elif skip_existing and os.path.exists(proj.thumbs_meta):
+        elif skip_existing and is_valid_thumbs_meta(proj.thumbs_meta):
             log.info("Skipping thumbnails (metadata exists)")
             thumb_paths = load_json(proj.thumbs_meta)
         else:
@@ -335,7 +342,7 @@ class MazingerDubber:
             save_json(thumb_paths, proj.thumbs_meta)
 
         # 4. Describe content --------------------------------------------
-        if skip_existing and os.path.exists(proj.description):
+        if skip_existing and is_valid_json_file(proj.description, required_keys=("title", "summary")):
             log.info("Skipping description (file exists)")
             description = load_json(proj.description)
         elif not has_video:
@@ -352,7 +359,7 @@ class MazingerDubber:
 
         # 4b. ASR review (optional) --------------------------------------
         if asr_review:
-            if skip_existing and os.path.exists(proj.reviewed_srt):
+            if skip_existing and is_valid_srt_file(proj.reviewed_srt):
                 log.info("Skipping ASR review (file exists)")
                 with open(proj.reviewed_srt, encoding="utf-8") as fh:
                     source_srt_text = fh.read()
@@ -374,7 +381,7 @@ class MazingerDubber:
             from mazinger.profiles import create_auto_clone_profile
             profile_dir = proj.voice_profile_dir
             profile_wav = os.path.join(profile_dir, "voice.wav")
-            if skip_existing and os.path.isfile(profile_wav):
+            if skip_existing and is_valid_media_file(profile_wav):
                 log.info("Reusing auto-cloned voice profile: %s", profile_dir)
                 voice_sample = profile_wav
             else:
@@ -388,7 +395,7 @@ class MazingerDubber:
                 )
 
         # 5. Translate ---------------------------------------------------
-        if skip_existing and os.path.exists(proj.translated_raw_srt):
+        if skip_existing and is_valid_srt_file(proj.translated_raw_srt):
             log.info("Skipping translation (file exists)")
             with open(proj.translated_raw_srt, encoding="utf-8") as fh:
                 translated_srt = fh.read()
@@ -408,8 +415,25 @@ class MazingerDubber:
                 fh.write(translated_srt)
 
         # 6. Re-segment --------------------------------------------------
-        if skip_existing and os.path.exists(proj.final_srt):
+        effective_mode = segment_mode
+        if segment_mode == "auto":
+            src_blocks = parse_blocks(translated_srt)
+            durs = sorted(e - s for _, s, e, _ in src_blocks) if src_blocks else [5.0]
+            median_dur = durs[len(durs) // 2]
+            effective_mode = "long" if median_dur < 3.0 else "short"
+            log.info("Auto segment mode: median=%.1fs -> %s", median_dur, effective_mode)
+
+        if skip_existing and is_valid_srt_file(proj.final_srt):
             log.info("Skipping re-segmentation (file exists)")
+        elif effective_mode == "long":
+            resegmented = resegment.merge_long_segments(
+                translated_srt,
+                source_audio=proj.audio,
+                min_duration=min_segment_duration,
+                max_duration=max_segment_duration,
+            )
+            with open(proj.final_srt, "w", encoding="utf-8") as fh:
+                fh.write(resegmented)
         else:
             resegmented = resegment.resegment_srt(
                 translated_srt, client=client, llm_model=self.llm_model,
@@ -473,7 +497,14 @@ class MazingerDubber:
             elif subtitle_style:
                 from mazinger.subtitle import burn_subtitles
                 if subtitle_source == "translated":
-                    srt_path = proj.final_srt
+                    # Prefer the pre-merged SRT for on-screen display;
+                    # final_srt may contain long merged chunks unsuitable
+                    # for readable subtitles.
+                    srt_path = (
+                        proj.translated_raw_srt
+                        if os.path.exists(proj.translated_raw_srt)
+                        else proj.final_srt
+                    )
                 elif subtitle_source == "original":
                     srt_path = proj.source_srt
                 else:

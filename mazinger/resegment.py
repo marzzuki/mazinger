@@ -560,3 +560,125 @@ def resegment_srt(
         len(blocks), len(merged), len(resegmented), split_calls,
     )
     return build(resegmented)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Long-segment merge (rule-based, no LLM calls)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_SENTENCE_END = frozenset(".!?…؟。！？")
+
+
+def _find_silence_points(
+    audio_path: str,
+    blocks: list[tuple[str, float, float, str]],
+    silence_thresh_db: float = -40.0,
+    min_gap: float = 0.3,
+) -> set[int]:
+    """Return indices *i* where the gap between block *i* and *i+1* is silent."""
+    from mazinger.assemble import _load_and_resample, _rms_energy, TARGET_SR
+
+    audio = _load_and_resample(audio_path, TARGET_SR)
+    total_samples = len(audio)
+    thresh = 10 ** (silence_thresh_db / 20.0)
+    silent = set()
+
+    for i in range(len(blocks) - 1):
+        gap_start = blocks[i][2]   # end of block i
+        gap_end = blocks[i + 1][1]  # start of block i+1
+        if gap_end - gap_start < min_gap:
+            continue
+        s0 = min(int(gap_start * TARGET_SR), total_samples)
+        s1 = min(int(gap_end * TARGET_SR), total_samples)
+        if s1 - s0 < TARGET_SR // 50:  # < 20ms
+            continue
+        region = audio[s0:s1]
+        rms = _rms_energy(region, len(region))
+        if rms[0] < thresh:
+            silent.add(i)
+
+    return silent
+
+
+def merge_long_segments(
+    srt_text: str,
+    source_audio: str | None = None,
+    *,
+    min_duration: float = 8.0,
+    max_duration: float = 30.0,
+    silence_thresh_db: float = -40.0,
+    min_silence_gap: float = 0.3,
+) -> str:
+    """Merge translated SRT blocks into longer chunks for TTS.
+
+    Uses punctuation boundaries, inter-block gaps, and optionally source
+    audio silence detection to decide where to split.  No LLM calls.
+
+    Returns:
+        Re-merged SRT string.
+    """
+    blocks = parse_blocks(sanitize(srt_text))
+    if not blocks:
+        return srt_text
+
+    silent_gaps: set[int] = set()
+    if source_audio:
+        try:
+            silent_gaps = _find_silence_points(
+                source_audio, blocks, silence_thresh_db, min_silence_gap,
+            )
+        except Exception:
+            log.debug("Silence detection failed; merging by punctuation only")
+
+    merged: list[tuple[float, float, str]] = []
+    texts: list[str] = []
+    chunk_start: float | None = None
+    chunk_end: float = 0.0
+
+    for i, (_, start, end, text) in enumerate(blocks):
+        text = text.strip()
+        if not text:
+            continue
+
+        # Would including this block exceed the hard limit?
+        if chunk_start is not None and (end - chunk_start) > max_duration:
+            merged.append((chunk_start, chunk_end, " ".join(texts)))
+            texts, chunk_start = [], None
+
+        if chunk_start is None:
+            chunk_start = start
+        chunk_end = end
+        texts.append(text)
+
+        dur = chunk_end - chunk_start
+
+        # Check for a natural break after this block
+        last_char = text[-1] if text else ""
+        is_sentence_end = last_char in _SENTENCE_END
+        has_gap = (i in silent_gaps) or (
+            i < len(blocks) - 1 and blocks[i + 1][1] - end >= min_silence_gap
+        )
+
+        if dur >= min_duration and (is_sentence_end or has_gap):
+            merged.append((chunk_start, chunk_end, " ".join(texts)))
+            texts, chunk_start = [], None
+
+    if texts and chunk_start is not None:
+        merged.append((chunk_start, chunk_end, " ".join(texts)))
+
+    # Validation
+    durations = [e - s for s, e, _ in merged]
+    if durations:
+        durations.sort()
+        median = durations[len(durations) // 2]
+        log.info(
+            "Long-segment merge: %d -> %d chunks "
+            "(min=%.1fs, max=%.1fs, median=%.1fs)",
+            len(blocks), len(merged),
+            durations[0], durations[-1], median,
+        )
+        over = [d for d in durations if d > max_duration * 1.1]
+        if over:
+            log.warning("%d chunks exceed max_duration (%.1fs)", len(over), max_duration)
+
+    return build(merged)
