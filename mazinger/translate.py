@@ -194,6 +194,11 @@ def _build_system_prompt(
     words_per_second: float = _DEFAULT_WPS,
     duration_budget: float = DURATION_BUDGET,
     translate_technical_terms: bool = False,
+    summary: str = "",
+    dialect: str = "",
+    tone: str = "",
+    speakers: list[dict] | None = None,
+    languages: list[str] | None = None,
 ) -> str:
     kw_examples = ", ".join(f'"{ k}"' for k in keywords[:10])
     kp_summary = "; ".join(keypoints[:8])
@@ -211,17 +216,41 @@ def _build_system_prompt(
     else:
         source_ctx = f" The source subtitles are in {source_language}."
 
+    if languages and len(languages) > 1:
+        langs = ", ".join(languages)
+        source_ctx += (
+            f" The speaker uses multiple languages ({langs}) —"
+            " interpret mixed-language passages in context and translate"
+            f" everything into {target_language}."
+        )
+
+    genre_ctx = f" The video is about: {summary}" if summary else ""
+    dialect_ctx = f" The source dialect is {dialect}." if dialect else ""
+    tone_ctx = f" The delivery style is {tone}." if tone else ""
+    speaker_ctx = ""
+    if speakers:
+        roles = ", ".join(
+            f"{s['role']} ({s.get('desc', '')})" for s in speakers
+        )
+        speaker_ctx = f" Speakers: {roles}."
+
     return f"""\
-You are a professional {target_language} dubbing script writer for technical / \
-programming tutorial videos.{source_ctx} You are given subtitle texts as a JSON \
+You are a professional {target_language} dubbing script writer.{source_ctx}{genre_ctx}{dialect_ctx}{tone_ctx}{speaker_ctx} You are given subtitle texts as a JSON \
 array (with index, text, and a target word count), video screenshots, and a \
 keyword/keypoint list. Produce natural, well-phrased {target_language} dubbing \
 scripts -- not a literal word-for-word translation, but also NOT a compressed \
 summary.
 
 QUALITY GOALS:
-- The {target_language} must sound like a fluent {target_language}-speaking instructor \
-  naturally explaining the topic in a friendly, conversational teaching tone.
+- The {target_language} must sound like a fluent native {target_language} speaker \
+  naturally explaining the topic in a conversational tone matching the original \
+  register.
+- The source speech may use colloquial dialect rather than formal/standard \
+  language. Always interpret words in the spoken dialect — colloquial or \
+  dialectal meanings take priority over literary/formal ones.
+- Preserve the speaker's point of view and self-references (e.g. references \
+  to "our show", "previous episodes", "as we mentioned"). Keep the original \
+  tense — do not shift past to future or vice versa.
 - Clean up false starts, unintelligible fragments, and obvious speech errors. \
   However, PRESERVE the speaker's natural elaboration, rhetorical questions, \
   examples, and storytelling flow.
@@ -528,6 +557,11 @@ def translate_srt(
         words_per_second = estimate_wps(all_blocks, target_language)
     log.info("Translation WPS: %.2f (budget: %.0f%%)", words_per_second, duration_budget * 100)
 
+    # Use dialect from describe phase as source language when auto-detected
+    described_dialect = description.get("dialect", "")
+    if source_language == "auto" and described_dialect:
+        source_language = described_dialect
+
     keywords = description.get("keywords", [])
     keypoints = description.get("keypoints", [])
     system_prompt = _build_system_prompt(
@@ -536,6 +570,11 @@ def translate_srt(
         words_per_second=words_per_second,
         duration_budget=duration_budget,
         translate_technical_terms=translate_technical_terms,
+        summary=description.get("summary", ""),
+        dialect=description.get("dialect", ""),
+        tone=description.get("tone", ""),
+        speakers=description.get("speakers"),
+        languages=description.get("languages"),
     )
 
     log.info("Translating %d SRT blocks in batches of %d", len(all_blocks), blocks_per_batch)

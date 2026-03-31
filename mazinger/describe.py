@@ -29,11 +29,27 @@ STRICT RULES:
 - Keep keywords to 10-20 items MAX. No duplicates, no near-duplicates.
 - If the content is in a non-English language, still write title/summary/keypoints in English.
 - Keywords should preserve original casing and include technical terms, names, tools.
+- For "dialect": identify the specific spoken dialect or register from the subtitle text
+  (e.g. "Egyptian Arabic", "Brazilian Portuguese", "American English", "formal MSA").
+  If uncertain, write the broad language name.
+- For "languages": list ALL languages that appear in the speech, in order of prevalence.
+  Include the primary language and any secondary languages the speaker switches to
+  (e.g. ["Arabic", "English"] when the speaker uses English terms within Arabic speech).
+- For "tone": describe the delivery style in 2-4 words (e.g. "serious analytical",
+  "casual storytelling", "news report", "comedic", "academic lecture").
+- For "speakers": list ONLY people who actually speak on-camera in the video,
+  NOT people who are merely quoted, cited, or referenced by the speaker.
+  Each entry has "role" (e.g. "host", "narrator", "interviewer", "guest") and
+  a short "desc". If only one speaker, still include them.
 
 Return EXACTLY this JSON structure (no markdown fences, no extra text):
 {
   "title": "short descriptive title",
   "summary": "2-3 sentences summarising the video content",
+  "dialect": "specific spoken dialect or register",
+  "languages": ["primary language", "secondary language if any"],
+  "tone": "2-4 word delivery style",
+  "speakers": [{"role": "host", "desc": "short description"}],
   "keypoints": ["unique point 1", "unique point 2", ...],
   "keywords": ["term1", "Term2", ...]
 }"""
