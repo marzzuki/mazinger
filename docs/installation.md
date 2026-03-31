@@ -31,7 +31,7 @@ pip install "mazinger[tts-chatterbox]"         # Chatterbox — needs only a voi
 ### Full Bundles
 
 ```bash
-pip install "mazinger[all-qwen]"              # WhisperX + Qwen3-TTS
+pip install "mazinger[all-qwen]"              # faster-whisper + Qwen3-TTS
 pip install "mazinger[all-chatterbox]"        # faster-whisper + Chatterbox
 ```
 
@@ -45,7 +45,7 @@ Qwen and Chatterbox pull different versions of `transformers` and cannot coexist
 | `tts-chatterbox` | == 4.46.3 | `transcribe-faster`, OpenAI transcription |
 
 WhisperX requires `transformers>=4.48`, so it conflicts with Chatterbox. When using Chatterbox, choose `transcribe-faster` or the cloud-based OpenAI transcription.
-
+> **Note:** `faster-whisper` is the recommended default for local transcription. It is lightweight, easy to install, and compatible with all TTS engines. WhisperX is still available as an optional extra (`transcribe-whisperx`) for users who need word-level alignment via wav2vec2.
 ## What Each Task Requires
 
 | Task | Command | Core install | Extra needed |

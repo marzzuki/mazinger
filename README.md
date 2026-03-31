@@ -51,20 +51,20 @@ Add local transcription or TTS as optional extras:
 
 ```bash
 # Local transcription
-pip install "mazinger[transcribe-faster]"      # faster-whisper (Chatterbox-compatible)
-pip install "mazinger[transcribe-whisperx]"    # WhisperX (best word-level alignment)
+pip install "mazinger[transcribe-faster]"      # faster-whisper (default, recommended)
+pip install "mazinger[transcribe-whisperx]"    # WhisperX (optional, word-level alignment)
 
 # Voice synthesis
 pip install "mazinger[tts]"                    # Qwen3-TTS (voice sample + transcript)
 pip install "mazinger[tts-chatterbox]"         # Chatterbox (voice sample only, emotion control)
 
 # Full bundles
-pip install "mazinger[all-qwen]"              # WhisperX + Qwen3-TTS
+pip install "mazinger[all-qwen]"              # faster-whisper + Qwen3-TTS
 pip install "mazinger[all-chatterbox]"        # faster-whisper + Chatterbox
 ```
 
 > Qwen and Chatterbox require different `transformers` versions and cannot share an environment.
-> WhisperX also conflicts with Chatterbox — pair it with Qwen, or use faster-whisper with Chatterbox.
+> WhisperX is available as an optional extra but is not installed by default due to complex dependencies.
 
 See the [Installation Guide](docs/installation.md) for venv recipes, Colab setup, and uv overrides.
 

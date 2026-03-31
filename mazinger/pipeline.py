@@ -70,7 +70,7 @@ class MazingerDubber:
         voice_theme: str | None = None,
         slug: str | None = None,
         device: str = "cuda",
-        transcribe_method: str = "whisperx",
+        transcribe_method: str = "faster-whisper",
         whisper_model: str | None = None,
         beam_size: int = 5,
         tts_model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
@@ -125,10 +125,11 @@ class MazingerDubber:
             slug:           Project slug override. Derived from the video title
                             or filename when ``None``.
             device:         Accelerator device (``cuda`` or ``cpu``).
-            transcribe_method: Transcription backend: ``openai`` (default, cloud API)
-                            or ``whisperx`` (local GPU, requires [transcribe] extra).
+            transcribe_method: Transcription backend: ``faster-whisper`` (default,
+                            local GPU), ``openai`` (cloud API), or ``whisperx``
+                            (requires [transcribe-whisperx] extra).
             whisper_model:  Whisper model name. Defaults to ``whisper-1`` for OpenAI,
-                            ``large-v3`` for WhisperX.
+                            ``large-v3`` for faster-whisper/WhisperX.
             tts_model_name: HuggingFace model identifier for TTS.
             tts_dtype:      Weight dtype for the TTS model.
             tts_language:   Language name passed to the TTS model.

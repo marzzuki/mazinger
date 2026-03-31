@@ -352,7 +352,7 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             with gr.Tab("📝 Transcription"):
                 transcribe_method = gr.Dropdown(
                     list(METHOD_MAP.keys()),
-                    value="WhisperX (local GPU)",
+                    value="Faster Whisper (local GPU)",
                     label="Transcription method",
                     info="Cloud = needs OpenAI key  •  Local = faster, requires GPU",
                 )

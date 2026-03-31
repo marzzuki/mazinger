@@ -157,10 +157,10 @@ mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
 # Cloud (OpenAI Whisper API)
 mazinger transcribe ./output/projects/my-video/source/audio.mp3 -o subs.srt
 
-# Local with faster-whisper
+# Local with faster-whisper (default)
 mazinger transcribe audio.mp3 -o subs.srt --method faster-whisper --device cuda
 
-# Local with WhisperX
+# Local with WhisperX (requires transcribe-whisperx extra)
 mazinger transcribe audio.mp3 -o subs.srt --method whisperx --device cuda
 ```
 

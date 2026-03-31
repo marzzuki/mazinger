@@ -37,7 +37,7 @@ mazinger dub <source> [options]
 | `--voice-theme` | — | Pre-defined voice theme (e.g. `narrator-m`, `warm-f`). See `mazinger profile list` |
 | `--voice-sample` | — | Path to reference voice audio file |
 | `--voice-script` | — | Path to transcript of the voice sample (or inline text) |
-| `--transcribe-method` | `openai` | `openai`, `faster-whisper`, or `whisperx` |
+| `--transcribe-method` | `faster-whisper` | `openai`, `faster-whisper`, or `whisperx` |
 | `--whisper-model` | varies by method | Whisper model name |
 | `--beam-size` | `5` | Beam size for decoding (faster-whisper/whisperx) |
 | `--device` | `auto` | `auto`, `cuda`, or `cpu` |
@@ -183,7 +183,7 @@ If `source` is provided, the video is downloaded first and its audio is transcri
 |------|---------|-------------|
 | `--audio` | — | Path to audio file (overrides source) |
 | `-o`, `--output` | — | Output SRT path |
-| `--method` | `openai` | `openai`, `faster-whisper`, or `whisperx` |
+| `--method` | `faster-whisper` | `openai`, `faster-whisper`, or `whisperx` |
 | `--model` | varies | Whisper model name (`whisper-1` for OpenAI, `large-v3` for local) |
 | `--device` | `auto` | `auto`, `cuda`, `cpu` |
 | `--batch-size` | `16` | Batch size for local transcription |

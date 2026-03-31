@@ -83,8 +83,8 @@ TTS synthesis has finer granularity — individual segment WAVs (`seg_0001.wav`,
 **Choosing a method:**
 
 - Using Chatterbox TTS → pick `openai` or `faster-whisper` (WhisperX conflicts)
-- Need offline processing → pick `faster-whisper`
-- Need word-level alignment → pick `whisperx` with Qwen TTS
+- Need offline processing → pick `faster-whisper` (default)
+- Need word-level alignment → pick `whisperx` with Qwen TTS (requires `transcribe-whisperx` extra)
 
 ## TTS Engines
 

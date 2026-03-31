@@ -37,9 +37,9 @@ transcribe-whisperx = [
     "scipy>=1.14",          # ABI-compatible with numpy 2.x (Colab Fix)
     "scikit-learn>=1.5",    # Pulled by transformers; must match scipy
 ]
-# Alias for backwards compatibility (points to whisperx)
+# Alias for convenience (points to faster-whisper)
 transcribe = [
-    "mazinger[transcribe-whisperx]",
+    "mazinger[transcribe-faster]",
 ]
 # TTS with Qwen (compatible with transcribe-whisperx and transcribe-faster)
 tts = [
@@ -69,7 +69,7 @@ audio-enhance = [
 ]
 # Full pipeline with Qwen TTS — same as bare install (kept as alias)
 all-qwen = [
-    "mazinger[transcribe-whisperx,tts,audio-enhance]",
+    "mazinger[transcribe-faster,tts,audio-enhance]",
 ]
 # Full pipeline with Chatterbox TTS + faster-whisper (fully compatible)
 all-chatterbox = [
@@ -95,8 +95,6 @@ override-dependencies = [
     "torch>=2.0",          # chatterbox pins torch==2.6.0; allow system CUDA build
     "torchaudio>=2.0",     # chatterbox pins torchaudio==2.6.0; allow system CUDA build
     "safetensors>=0.3",    # chatterbox pins safetensors==0.5.3; 0.7+ is backward-compat
-    "pyannote.audio>=4.0", # whisperx pins pyannote<4.0; but torchaudio 2.11+ needs pyannote 4.x
-    "whisperx>=3.8.4",     # older whisperx passes deprecated use_auth_token to pyannote 4.x
 ]
 
 # Build dependencies for packages with missing build requirements
