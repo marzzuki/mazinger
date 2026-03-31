@@ -225,9 +225,11 @@ def assemble_timeline(
         target_dur = seg["target_dur"]
         start_samp = int(seg["start"] * sample_rate)
 
-        # Budget = time until the next segment starts (minus the gap),
-        # or until the end of the original audio for the last segment.
-        if seg_i + 1 < len(valid_segs):
+        # Budget = available time window for dynamic tempo decisions.
+        # Uses the real gap to the next segment so tempo-stretch targets
+        # the actual available space (the original behavior).
+        is_last = (seg_i + 1 >= len(valid_segs))
+        if not is_last:
             next_start = valid_segs[seg_i + 1]["start"]
             budget_dur = max(next_start - seg["start"] - segment_gap_ms / 1000, target_dur)
         else:
@@ -286,24 +288,36 @@ def assemble_timeline(
             audio = raw_audio
             stats["ok"] += 1
 
-        # -- Step 2: trim if *still* overflowing after stretch ------------
-        if len(audio) > budget_samps:
-            trim_at = _find_last_silence(audio, sample_rate, budget_samps)
-            trimmed_secs = (len(audio) - trim_at) / sample_rate
-            audio = audio[:trim_at]
-            overflow_total += trimmed_secs
-            stats["trimmed"] += 1
-
-            if trimmed_secs > 0.2:
-                log.warning(
-                    "Seg %s: trimmed %.2fs to fit budget %.2fs",
-                    seg["idx"], trimmed_secs, budget_dur,
-                )
-
-            # Longer fade-out to mask the cut
-            audio = _fade(audio, sample_rate, fade_in_ms=15, fade_out_ms=100)
+        # -- Step 2: handle overflow after stretch -------------------------
+        if is_last:
+            # Last segment: trim only if it exceeds the generous tail pad.
+            clip_samps = int((budget_dur + tail_pad_sec) * sample_rate)
+            if len(audio) > clip_samps:
+                trim_at = _find_last_silence(audio, sample_rate, clip_samps)
+                trimmed_secs = (len(audio) - trim_at) / sample_rate
+                audio = audio[:trim_at]
+                overflow_total += trimmed_secs
+                stats["trimmed"] += 1
+                if trimmed_secs > 0.2:
+                    log.warning(
+                        "Seg %s (last): trimmed %.2fs to fit budget+pad %.2fs",
+                        seg["idx"], trimmed_secs, budget_dur + tail_pad_sec,
+                    )
+                audio = _fade(audio, sample_rate, fade_in_ms=15, fade_out_ms=150)
+            else:
+                audio = _fade(audio, sample_rate, fade_in_ms=15, fade_out_ms=200)
         else:
-            # Normal gentle fades
+            # Non-last segments: NEVER trim.  If the tempo-stretched audio
+            # still slightly overflows, let it overlap into the gap — the
+            # additive paste (+=) blends it naturally.  This preserves
+            # complete speech without any hard cuts.
+            if len(audio) > budget_samps:
+                overflow_secs = (len(audio) - budget_samps) / sample_rate
+                overflow_total += overflow_secs
+                log.debug(
+                    "Seg %s: overflows by %.2fs after tempo — allowing overlap",
+                    seg["idx"], overflow_secs,
+                )
             audio = _fade(audio, sample_rate, fade_in_ms=15, fade_out_ms=50)
 
         # -- Step 3: paste at SRT start time ------------------------------
@@ -315,22 +329,27 @@ def assemble_timeline(
     stats["skipped"] += len(segment_info) - len(valid_segs)
 
     # Trim tail padding — keep up to the last placed sample or original
-    # duration, whichever is longer.
+    # duration, whichever is longer, plus a small cushion for the fade.
     orig_samples = int(original_duration * sample_rate)
-    placed_end = orig_samples
-    # Find actual last non-zero sample
+    # Find actual last non-zero sample (= where audio content ends)
     nz = np.nonzero(timeline)[0]
-    if len(nz):
-        placed_end = max(placed_end, int(nz[-1]) + 1)
-    timeline = timeline[:placed_end]
+    content_end = int(nz[-1]) + 1 if len(nz) else orig_samples
 
-    # Apply a gentle fade-out to the very end of the timeline so the
+    # Apply a gentle fade-out at the actual content boundary so the
     # listener doesn't hear a hard cut when the last segment finishes.
-    tail_fade_ms = 150
-    tail_fade_samps = min(int(sample_rate * tail_fade_ms / 1000), len(timeline) // 2)
+    # The fade ramps down the *audio content*, not trailing silence.
+    tail_fade_ms = 300
+    tail_fade_samps = min(int(sample_rate * tail_fade_ms / 1000), content_end // 2)
     if tail_fade_samps >= 2:
         ramp = 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, tail_fade_samps))).astype(np.float32)
-        timeline[-tail_fade_samps:] *= ramp
+        timeline[content_end - tail_fade_samps:content_end] *= ramp
+
+    # Keep a tiny silence cushion (100 ms) after the content fade-out
+    # so the ending doesn't feel abrupt, then trim.
+    cushion = int(sample_rate * 0.1)
+    placed_end = max(content_end + cushion, orig_samples)
+    placed_end = min(placed_end, total_samples)
+    timeline = timeline[:placed_end]
 
     peak = np.max(np.abs(timeline))
     if peak > 1.0:

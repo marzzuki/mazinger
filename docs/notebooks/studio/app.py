@@ -171,13 +171,13 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             )
             voice_type = gr.Radio(
                 ["Voice Theme", "Preset Voice", "Custom Voice", "Auto-Clone"],
-                value="Voice Theme",
+                value="Auto-Clone",
                 label="Voice source",
                 scale=1,
             )
 
-        # ── Voice Theme (default — easiest for non-technical users) ──
-        with gr.Group(visible=True, elem_classes="voice-theme-group") as theme_group:
+        # ── Voice Theme ──
+        with gr.Group(visible=False, elem_classes="voice-theme-group") as theme_group:
             gr.Markdown(
                 "Pick a voice style — no files needed. "
                 "A voice is generated automatically to match the theme.",
@@ -234,8 +234,8 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
                     scale=2,
                 )
 
-        # ── Auto-Clone (clone voice from source) ──
-        with gr.Group(visible=False) as autoclone_group:
+        # ── Auto-Clone (clone voice from source — default) ──
+        with gr.Group(visible=True) as autoclone_group:
             gr.Markdown(
                 "The speaker's voice is cloned directly from the source audio. "
                 "No voice files or settings needed — the pipeline picks the "
@@ -336,7 +336,7 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
             with gr.Tab("📥 Download"):
                 quality = gr.Dropdown(
                     ["Low (360p)", "Medium (720p)", "High (best)"],
-                    value="Medium (720p)",
+                    value="High (best)",
                     label="Video quality",
                 )
                 with gr.Row():
@@ -491,18 +491,17 @@ with gr.Blocks(theme=theme, title="Mazinger Studio", css=CSS) as app:
     )
 
     # ── LLM provider toggle ───────────────────────────────────────
-    # Auto-switches transcription method when LLM provider changes
+    # Switches LLM panel visibility; transcription method stays unchanged
+    # (local Faster Whisper is always preferred, cloud Whisper is a manual fallback)
     def _on_llm_provider_change(choice):
         is_ollama = (choice == "Ollama (Local — Free)")
         return (
             gr.update(visible=is_ollama),        # ollama_group
             gr.update(visible=not is_ollama),     # openai_group
-            gr.update(value="WhisperX (local GPU)" if is_ollama
-                      else "OpenAI Whisper (cloud)"),  # transcribe_method
         )
     llm_provider.change(
         _on_llm_provider_change, llm_provider,
-        [ollama_group, openai_group, transcribe_method],
+        [ollama_group, openai_group],
     )
 
     # ── Wire everything ───────────────────────────────────────────
