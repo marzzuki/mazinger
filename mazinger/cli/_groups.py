@@ -246,12 +246,12 @@ def add_tts_engine(p: argparse.ArgumentParser) -> None:
         "--tts-engine",
         default="qwen",
         choices=["qwen", "chatterbox", "mlx"],
-        help="TTS engine: 'qwen' (Qwen3-TTS) or 'chatterbox' (ResembleAI Chatterbox). MLX variant mlx is supported.",
+        help="TTS engine: 'qwen' (Qwen3-TTS), 'chatterbox' (ResembleAI Chatterbox), or 'mlx' (Apple Silicon).",
     )
     p.add_argument(
         "--mlx-model",
-        default="mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
-        help="MLX Qwen3-TTS model name (default: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16).",
+        default="mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16",
+        help="MLX Qwen3-TTS model name (default: mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16).",
     )
     p.add_argument(
         "--chatterbox-exaggeration",

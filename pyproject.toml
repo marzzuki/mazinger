@@ -75,7 +75,6 @@ all-qwen = [
 all-chatterbox = [
     "mazinger[transcribe-faster,tts-chatterbox,audio-enhance]",
 ]
-
 # TTS with MLX Qwen3-TTS for Apple Silicon (8x speedup on M-series)
 tts-mlx = [
     "mlx-audio>=0.4.2",
