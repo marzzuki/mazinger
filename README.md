@@ -38,7 +38,7 @@ Every stage can run independently or as part of the full pipeline. Interrupted r
 - ffmpeg installed and on `PATH` (`apt install ffmpeg` / `brew install ffmpeg`)
 - An OpenAI API key for LLM-powered stages (transcription, translation, thumbnails, description)
 - A CUDA GPU for local transcription and TTS (not needed for cloud-only workflows)
-- Apple Silicon (M1/M2/M3/M4) for MLX-accelerated TTS (optional, 8x faster than CPU)
+- Apple Silicon (M1/M2/M3/M4/M5) for MLX-accelerated TTS (optional, 8x faster than CPU)
 
 ## Installation
 
@@ -129,13 +129,7 @@ proj = dubber.dub(
 
 ### Apple Silicon acceleration (MLX)
 
-On M1/M2/M3/M4 Macs, the MLX engine delivers ~8x faster TTS with 3x less RAM compared to PyTorch CPU:
-
-| Metric | PyTorch (CPU) | MLX (Apple Silicon) |
-|--------|--------------|---------------------|
-| Time/segment | 40s–20min | ~5s |
-| RAM usage | 10+ GB | 2–3 GB |
-| 22-segment dub | 1.5–2 hours | ~2 minutes |
+On M1/M2/M3/M4/M5 Macs, the MLX engine delivers ~8x faster TTS with 3x less RAM compared to PyTorch CPU:
 
 ```bash
 mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
