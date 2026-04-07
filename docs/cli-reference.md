@@ -37,8 +37,9 @@ mazinger dub <source> [options]
 | `--voice-theme` | — | Pre-defined voice theme (e.g. `narrator-m`, `warm-f`). See `mazinger profile list` |
 | `--voice-sample` | — | Path to reference voice audio file |
 | `--voice-script` | — | Path to transcript of the voice sample (or inline text) |
-| `--transcribe-method` | `faster-whisper` | `openai`, `faster-whisper`, or `whisperx` |
+| `--transcribe-method` | `faster-whisper` | `openai`, `faster-whisper`, `whisperx`, or `mlx-whisper` |
 | `--whisper-model` | varies by method | Whisper model name |
+| `--mlx-whisper-model` | `mlx-community/whisper-large-v3-turbo-asr-fp16` | MLX Whisper model name |
 | `--beam-size` | `5` | Beam size for decoding (faster-whisper/whisperx) |
 | `--device` | `auto` | `auto`, `cuda`, or `cpu` |
 | `--source-language` | `auto` | Source language for translation (or `auto` to detect) |
@@ -49,8 +50,9 @@ mazinger dub <source> [options]
 | `--asr-review` | off | Review ASR transcript with LLM to fix typos and punctuation |
 | `--keep-technical-english` | off | Convert technical terms to English in the source transcript (requires `--asr-review`) |
 | `--youtube-subs` | off | Download YouTube subtitles and compare with ASR to pick the best source |
-| `--tts-engine` | `qwen` | `qwen` or `chatterbox` |
+| `--tts-engine` | `qwen` | `qwen`, `chatterbox`, or `mlx` |
 | `--tts-model` | `Qwen/Qwen3-TTS-12Hz-1.7B-Base` | Qwen model ID |
+| `--mlx-tts-model` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | MLX TTS model name |
 | `--chatterbox-model` | `ResembleAI/chatterbox` | Chatterbox model ID |
 | `--tts-language` | same as `--target-language` | Language hint for TTS |
 | `--chatterbox-exaggeration` | `0.5` | Emotion intensity (0.0–1.0) |
@@ -183,7 +185,7 @@ If `source` is provided, the video is downloaded first and its audio is transcri
 |------|---------|-------------|
 | `--audio` | — | Path to audio file (overrides source) |
 | `-o`, `--output` | — | Output SRT path |
-| `--method` | `faster-whisper` | `openai`, `faster-whisper`, or `whisperx` |
+| `--method` | `faster-whisper` | `openai`, `faster-whisper`, `whisperx`, or `mlx-whisper` |
 | `--model` | varies | Whisper model name (`whisper-1` for OpenAI, `large-v3` for local) |
 | `--device` | `auto` | `auto`, `cuda`, `cpu` |
 | `--batch-size` | `16` | Batch size for local transcription |
@@ -361,8 +363,9 @@ mazinger speak [source] [options]
 | `--voice-script` | — | Path to transcript of voice sample |
 | `-o`, `--output` | — | Output WAV path |
 | `--segments-dir` | — | Directory for individual segment WAVs |
-| `--tts-engine` | `qwen` | `qwen` or `chatterbox` |
+| `--tts-engine` | `qwen` | `qwen`, `chatterbox`, or `mlx` |
 | `--tts-model` | `Qwen/Qwen3-TTS-12Hz-1.7B-Base` | Qwen model ID |
+| `--mlx-tts-model` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | MLX TTS model name |
 | `--chatterbox-model` | `ResembleAI/chatterbox` | Chatterbox model ID |
 | `--tts-language` | — | Language hint for TTS |
 | `--chatterbox-exaggeration` | `0.5` | Emotion intensity (0.0–1.0) |

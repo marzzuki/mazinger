@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from mazinger.cli._groups import (
+    DEFAULT_MLX_MODEL,
     add_common, add_llm, add_segment_mode, add_slice, add_source,
     add_subtitles, add_tempo, add_tts_engine, add_transcription,
     add_translation, add_voice,
@@ -71,10 +72,12 @@ def handler(args: argparse.Namespace) -> None:
         device=args.device,
         transcribe_method=args.transcribe_method,
         whisper_model=args.whisper_model,
+        mlx_whisper_model=args.mlx_whisper_model,
         beam_size=args.beam_size,
         tts_model_name=args.tts_model,
         tts_language=args.tts_language,
         tts_engine=args.tts_engine,
+        mlx_model=args.mlx_tts_model,
         source_language=args.source_language,
         target_language=args.target_language,
         chatterbox_model=args.chatterbox_model,

@@ -75,6 +75,20 @@ all-qwen = [
 all-chatterbox = [
     "mazinger[transcribe-faster,tts-chatterbox,audio-enhance]",
 ]
+# TTS with MLX Qwen3-TTS for Apple Silicon
+tts-mlx = [
+    "mlx-audio>=0.4.2",
+    "mlx>=0.20",
+    "soundfile>=0.12",
+]
+# MLX Whisper for Apple Silicon transcription
+transcribe-mlx = [
+    "mlx-whisper>=0.4",
+]
+# Full pipeline with MLX (transcribe-mlx + tts-mlx) — Apple Silicon only
+all-mlx = [
+    "mazinger[transcribe-mlx,tts-mlx]",
+]
 
 [project.scripts]
 mazinger = "mazinger.cli:main"

@@ -1,4 +1,4 @@
-"""Voice-cloned text-to-speech synthesis using Qwen3-TTS or Chatterbox."""
+"""Voice-cloned text-to-speech synthesis using Qwen3-TTS, Chatterbox, or MLX."""
 
 from __future__ import annotations
 
@@ -31,13 +31,20 @@ def _remove_from_cache(obj: Any) -> None:
 #  TTS Engine Type
 # ═══════════════════════════════════════════════════════════════════════════════
 
-TTSEngine = Literal["qwen", "chatterbox"]
+TTSEngine = Literal["qwen", "chatterbox", "mlx"]
+DEFAULT_MLX_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"
 
 SUPPORTED_LANGUAGES = (
     "Chinese", "English", "Japanese", "Korean",
     "German", "French", "Russian", "Portuguese",
     "Spanish", "Italian",
 )
+
+_LANG_TO_CODE = {
+    "Chinese": "zh", "English": "en", "Japanese": "ja", "Korean": "ko",
+    "German": "de", "French": "fr", "Russian": "ru", "Portuguese": "pt",
+    "Spanish": "es", "Italian": "it",
+}
 
 
 def validate_language(language: str) -> None:
@@ -267,6 +274,68 @@ class _ChatterboxTTSWrapper(TTSWrapper):
         log.info("Chatterbox TTS model unloaded, GPU memory freed.")
 
 
+def _load_mlx_model(
+    mlx_model: str = DEFAULT_MLX_MODEL,
+) -> Any:
+    import platform
+    if platform.system() != "Darwin":
+        raise RuntimeError(
+            "MLX TTS requires Apple Silicon (M1/M2/M3/M4/M5). "
+            f"Current platform: {platform.system()} ({platform.machine()}). "
+            "Use engine='qwen' or engine='chatterbox' instead."
+        )
+    try:
+        from mlx_audio.tts.utils import load_model as mlx_load_model
+    except ImportError:
+        raise ImportError(
+            "mlx-audio not installed. Install with: pip install 'mazinger[tts-mlx]'\n"
+            "Or use engine='qwen' for standard Qwen3-TTS."
+        ) from None
+
+    model = mlx_load_model(mlx_model)
+    log.info("Loaded MLX Qwen3-TTS model: %s", mlx_model)
+    return model
+
+
+class _MLXTTSWrapper(TTSWrapper):
+
+    engine = "mlx"
+
+    def __init__(self, model: Any, ref_audio: str, ref_text: str | None = None):
+        self.model = model
+        self.ref_audio = ref_audio
+        self.ref_text = ref_text
+
+    def synthesize(self, text: str, language: str = "English") -> tuple[np.ndarray, int]:
+        lang_code = _LANG_TO_CODE.get(language, "auto")
+        if lang_code == "auto":
+            log.warning("Unknown language %r for MLX TTS, falling back to 'auto'", language)
+        results = list(self.model.generate(
+            text=text,
+            ref_audio=self.ref_audio,
+            ref_text=self.ref_text or "",
+            lang_code=lang_code,
+        ))
+        if not results:
+            raise RuntimeError(
+                f"MLX TTS generate() returned no results "
+                f"(model={self.model!r}, text={text!r}, language={language!r})"
+            )
+        audio = np.array(results[0].audio)
+        return audio, results[0].sample_rate
+
+    def unload(self) -> None:
+        # MLX uses Metal GPU memory cache - clear it to free GPU RAM
+        try:
+            import mlx.core as mx
+            mx.clear_cache()
+        except Exception:
+            pass  # Best effort - mlx may not be installed
+        _remove_from_cache(self.model)
+        del self.model
+        gc.collect()
+        log.info("MLX TTS model unloaded, GPU memory freed.")
+
 
 
 
@@ -280,6 +349,7 @@ def load_model(
     dtype: str = "bfloat16",
     engine: TTSEngine = "qwen",
     chatterbox_model: str = "ResembleAI/chatterbox",
+    mlx_model: str = DEFAULT_MLX_MODEL,
 ) -> Any:
     """Load a TTS model and return it.
 
@@ -293,7 +363,12 @@ def load_model(
     Returns:
         The loaded model instance.
     """
-    name = chatterbox_model if engine == "chatterbox" else model_name
+    if engine == "chatterbox":
+        name = chatterbox_model
+    elif engine == "mlx":
+        name = mlx_model
+    else:
+        name = model_name
     key = _cache_key(engine, name, device, dtype)
     if key in _model_cache:
         log.info("Reusing cached TTS model: %s", key)
@@ -303,6 +378,8 @@ def load_model(
         model = _load_qwen_model(model_name, device, dtype)
     elif engine == "chatterbox":
         model = _load_chatterbox_model(device, chatterbox_model)
+    elif engine == "mlx":
+        model = _load_mlx_model(mlx_model)
     else:
         raise ValueError(f"Unknown TTS engine: {engine!r}")
 
@@ -317,6 +394,7 @@ def create_voice_prompt(
     engine: TTSEngine = "qwen",
     chatterbox_exaggeration: float = 0.5,
     chatterbox_cfg: float = 0.5,
+    mlx_model: str = DEFAULT_MLX_MODEL,
 ) -> TTSWrapper:
     """Build a reusable voice-clone prompt from a reference recording.
 
@@ -341,6 +419,9 @@ def create_voice_prompt(
         return _ChatterboxTTSWrapper(
             model, ref_audio, chatterbox_exaggeration, chatterbox_cfg,
         )
+    elif engine == "mlx":
+        log.info("MLX Qwen3-TTS voice clone configured from %s", ref_audio)
+        return _MLXTTSWrapper(model, ref_audio, ref_text)
     else:
         raise ValueError(f"Unknown TTS engine: {engine!r}")
 

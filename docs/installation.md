@@ -26,6 +26,13 @@ Both require a CUDA GPU (or can fall back to CPU at reduced speed).
 ```bash
 pip install "mazinger[tts]"                    # Qwen3-TTS — needs a voice sample + transcript
 pip install "mazinger[tts-chatterbox]"         # Chatterbox — needs only a voice sample, has emotion control
+pip install "mazinger[tts-mlx]"                # MLX Qwen3-TTS — Apple Silicon (M1/M2/M3/M4/M5)
+```
+
+### MLX Transcription (Apple Silicon)
+
+```bash
+pip install "mazinger[transcribe-mlx]"         # MLX Whisper — Apple Silicon
 ```
 
 ### Full Bundles
@@ -33,16 +40,19 @@ pip install "mazinger[tts-chatterbox]"         # Chatterbox — needs only a voi
 ```bash
 pip install "mazinger[all-qwen]"              # faster-whisper + Qwen3-TTS
 pip install "mazinger[all-chatterbox]"        # faster-whisper + Chatterbox
+pip install "mazinger[all-mlx]"               # MLX Whisper + MLX Qwen3-TTS (Apple Silicon only)
 ```
 
 ## Compatibility Matrix
 
-Qwen and Chatterbox pull different versions of `transformers` and cannot coexist in one environment. Pick one per virtual environment.
+Qwen, Chatterbox, and MLX pull different versions of `transformers` and cannot coexist in one environment. Pick one per virtual environment.
 
 | Extra | transformers | Compatible with |
 |-------|-------------|-----------------|
 | `tts` (Qwen) | ≥ 4.48 | `transcribe-faster`, `transcribe-whisperx` |
 | `tts-chatterbox` | == 4.46.3 | `transcribe-faster`, OpenAI transcription |
+| `tts-mlx` | (mlx-audio) | `transcribe-mlx` |
+| `all-mlx` | (mlx-audio + mlx-whisper) | Apple Silicon only |
 
 WhisperX requires `transformers>=4.48`, so it conflicts with Chatterbox. When using Chatterbox, choose `transcribe-faster` or the cloud-based OpenAI transcription.
 > **Note:** `faster-whisper` is the recommended default for local transcription. It is lightweight, easy to install, and compatible with all TTS engines. WhisperX is still available as an optional extra (`transcribe-whisperx`) for users who need word-level alignment via wav2vec2.
@@ -54,15 +64,18 @@ WhisperX requires `transformers>=4.48`, so it conflicts with Chatterbox. When us
 | Transcribe (cloud) | `mazinger transcribe` | yes | — (OpenAI API) |
 | Transcribe (local) | `mazinger transcribe --method faster-whisper` | no | `transcribe-faster` + CUDA |
 | Transcribe (local) | `mazinger transcribe --method whisperx` | no | `transcribe-whisperx` + CUDA |
+| Transcribe (MLX) | `mazinger transcribe --method mlx-whisper` | no | `transcribe-mlx` + Apple Silicon |
 | Thumbnails | `mazinger thumbnails` | yes | — |
 | Describe | `mazinger describe` | yes | — |
 | Translate | `mazinger translate` | yes | — |
 | Re-segment | `mazinger resegment` | yes | — |
 | Speak (Qwen) | `mazinger speak` | no | `tts` + CUDA |
 | Speak (Chatterbox) | `mazinger speak --tts-engine chatterbox` | no | `tts-chatterbox` + CUDA |
+| Speak (MLX) | `mazinger speak --tts-engine mlx` | no | `tts-mlx` + Apple Silicon |
 | Subtitle embed | `mazinger subtitle` | yes | ffmpeg only |
 | Full dub (Qwen) | `mazinger dub` | no | `all-qwen` + CUDA |
 | Full dub (Chatterbox) | `mazinger dub --tts-engine chatterbox` | no | `all-chatterbox` + CUDA |
+| Full dub (MLX) | `mazinger dub --tts-engine mlx` | no | `all-mlx` + Apple Silicon |
 
 ## System Dependencies
 

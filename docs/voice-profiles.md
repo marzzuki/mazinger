@@ -288,23 +288,25 @@ proj = dubber.dub(
 
 ## TTS Engine Comparison: Qwen vs Chatterbox
 
-| Feature | Qwen3-TTS (default) | Chatterbox |
-|---------|---------------------|------------|
-| **Voice sample** | Required | Required |
-| **Transcript of sample** | **Required** — must match the audio word-for-word | Not used |
-| **Install extra** | `pip install "mazinger[tts]"` | `pip install "mazinger[tts-chatterbox]"` |
-| **CLI flag** | `--tts-engine qwen` | `--tts-engine chatterbox` |
-| **Model flag** | `--tts-model Qwen/Qwen3-TTS-12Hz-1.7B-Base` | `--chatterbox-model ResembleAI/chatterbox` |
-| **Emotion control** | — | `--chatterbox-exaggeration` (0.0–1.0) |
-| **Pacing control** | — | `--chatterbox-cfg` (0.0–1.0) |
-| **Supported languages** | Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian | English (primary) |
+| Feature | Qwen3-TTS (default) | Chatterbox | MLX |
+|---------|---------------------|------------|-----|
+| **Voice sample** | Required | Required | Required |
+| **Transcript of sample** | **Required** — must match the audio word-for-word | Not used | **Required** — must match the audio word-for-word |
+| **Install extra** | `pip install "mazinger[tts]"` | `pip install "mazinger[tts-chatterbox]"` | `pip install "mazinger[tts-mlx]"` |
+| **CLI flag** | `--tts-engine qwen` | `--tts-engine chatterbox` | `--tts-engine mlx` |
+| **Model flag** | `--tts-model Qwen/Qwen3-TTS-12Hz-1.7B-Base` | `--chatterbox-model ResembleAI/chatterbox` | `--mlx-tts-model mlx-community/...` |
+| **Emotion control** | — | `--chatterbox-exaggeration` (0.0–1.0) | — |
+| **Pacing control** | — | `--chatterbox-cfg` (0.0–1.0) | — |
+| **Supported languages** | Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian | English (primary) | Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian |
+| **Hardware** | CUDA GPU | CUDA GPU | Apple Silicon |
 
-> **Important:** Qwen and Chatterbox require different `transformers` versions and **cannot share the same Python environment**. Create separate virtual environments for each.
+> **Important:** Qwen, Chatterbox, and MLX require different dependencies and **cannot share the same Python environment**. Create separate virtual environments for each.
 
 ### When to Choose Which
 
 - **Qwen** — Best for multilingual dubbing and when you have an accurate transcript of the voice sample.
 - **Chatterbox** — Best when you only have an audio clip with no transcript, or when you want fine-grained control over emotion and pacing.
+- **MLX** — Best for Apple Silicon users who want GPU-accelerated TTS without CUDA.
 
 ---
 
