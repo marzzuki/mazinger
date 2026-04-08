@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from mazinger.cli._groups import (
+    DEFAULT_MLX_MODEL,
     add_common, add_llm, add_source, add_tempo, add_transcription,
     add_translation, add_tts_engine, add_voice, ensure_transcription,
     make_llm_client, require_voice, resolve_project,
@@ -111,12 +112,14 @@ def handler(args: argparse.Namespace) -> None:
     model = tts.load_model(
         args.tts_model, device=args.device, dtype=args.dtype, engine=engine,
         chatterbox_model=args.chatterbox_model,
+        mlx_model=args.mlx_tts_model,
     )
     voice_prompt = tts.create_voice_prompt(
         model, voice_sample, ref_text,
         engine=engine,
         chatterbox_exaggeration=args.chatterbox_exaggeration,
         chatterbox_cfg=args.chatterbox_cfg,
+        mlx_model=args.mlx_tts_model,
     )
     segment_info = tts.synthesize_segments(
         model, voice_prompt, srt_entries, segments_dir,

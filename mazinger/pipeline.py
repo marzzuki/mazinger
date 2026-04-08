@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from mazinger.paths import ProjectPaths
+from mazinger.tts import DEFAULT_MLX_MODEL
 from mazinger.utils import (
     save_json, load_json, get_audio_duration, LLMUsageTracker,
     is_valid_media_file, is_valid_srt_file, is_valid_json_file,
@@ -72,11 +73,13 @@ class MazingerDubber:
         device: str = "cuda",
         transcribe_method: str = "faster-whisper",
         whisper_model: str | None = None,
+        mlx_whisper_model: str = "mlx-community/whisper-large-v3-turbo",
         beam_size: int = 5,
         tts_model_name: str = "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
         tts_dtype: str = "bfloat16",
         tts_language: str | None = None,
         tts_engine: str = "qwen",
+        mlx_model: str = DEFAULT_MLX_MODEL,
         source_language: str = "auto",
         target_language: str = "English",
         chatterbox_model: str = "ResembleAI/chatterbox",
@@ -281,8 +284,9 @@ class MazingerDubber:
                 proj.audio, proj.source_srt,
                 method=transcribe_method,
                 model=whisper_model,
+                mlx_whisper_model=mlx_whisper_model,
                 device=device,
-                beam_size=beam_size,
+                beam_size=None if transcribe_method == "mlx-whisper" else beam_size,
                 openai_api_key=self._api_key,
                 openai_base_url=self._base_url,
                 skip_resegment=not use_resegmented,
@@ -456,12 +460,14 @@ class MazingerDubber:
             tts_model_name, device=device_for_tts,
             dtype=tts_dtype, engine=tts_engine,
             chatterbox_model=chatterbox_model,
+            mlx_model=mlx_model,
         )
         voice_prompt = tts.create_voice_prompt(
             tts_model, voice_sample, ref_text,
             engine=tts_engine,
             chatterbox_exaggeration=chatterbox_exaggeration,
             chatterbox_cfg=chatterbox_cfg,
+            mlx_model=mlx_model,
         )
         segment_info = tts.synthesize_segments(
             tts_model, voice_prompt, srt_entries, proj.tts_segments_dir,

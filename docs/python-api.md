@@ -36,12 +36,14 @@ proj = dubber.dub(
     voice_theme=None,                 # str | None — pre-defined theme (alternative to sample+script)
     slug=None,                        # str — project directory name (auto-generated if omitted)
     device="cuda",                    # str — "cuda", "cpu", or "auto"
-    transcribe_method="faster-whisper",  # str — "openai", "faster-whisper", "whisperx"
+    transcribe_method="faster-whisper",  # str — "openai", "faster-whisper", "whisperx", "mlx-whisper"
     whisper_model=None,               # str — model name override
+    mlx_whisper_model="mlx-community/whisper-large-v3-turbo",  # str — MLX Whisper model
     tts_model_name="Qwen/Qwen3-TTS-12Hz-1.7B-Base",
     tts_dtype="bfloat16",             # str — "bfloat16", "float16", "float32"
     tts_language=None,                # str — TTS language hint (defaults to target_language)
-    tts_engine="qwen",               # str — "qwen" or "chatterbox"
+    tts_engine="qwen",               # str — "qwen", "chatterbox", or "mlx"
+    mlx_model="mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",  # str — MLX TTS model
     source_language="auto",           # str — source language or "auto"
     target_language="English",        # str — one of 33 supported languages
     chatterbox_model="ResembleAI/chatterbox",
@@ -227,6 +229,9 @@ transcribe("audio.mp3", "subtitles.srt")
 # Local
 transcribe("audio.mp3", "subtitles.srt", method="faster-whisper", device="cuda")
 transcribe("audio.mp3", "subtitles.srt", method="whisperx", device="cuda")
+
+# MLX (Apple Silicon)
+transcribe("audio.mp3", "subtitles.srt", method="mlx-whisper")
 ```
 
 ### thumbnails

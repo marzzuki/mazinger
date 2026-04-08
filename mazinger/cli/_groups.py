@@ -8,6 +8,9 @@ import sys
 
 DEFAULT_BASE_DIR = "./mazinger_output"
 
+from mazinger.tts import DEFAULT_MLX_MODEL
+from mazinger.transcribe import DEFAULT_MLX_WHISPER_MODEL
+
 log = __import__("logging").getLogger(__name__)
 
 
@@ -181,9 +184,11 @@ def add_tts_engine(p: argparse.ArgumentParser) -> None:
     p.add_argument("--tts-language", default=None, type=_language_type,
                    help="Target TTS language (defaults to --target-language).")
     p.add_argument(
-        "--tts-engine", default="qwen", choices=["qwen", "chatterbox"],
-        help="TTS engine: 'qwen' (Qwen3-TTS) or 'chatterbox' (ResembleAI Chatterbox).",
+        "--tts-engine", default="qwen", choices=["qwen", "chatterbox", "mlx"],
+        help="TTS engine: 'qwen' (Qwen3-TTS), 'chatterbox' (ResembleAI Chatterbox), or 'mlx' (Apple Silicon).",
     )
+    p.add_argument("--mlx-tts-model", default=DEFAULT_MLX_MODEL,
+                   help="MLX Qwen3-TTS model name (default: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16).")
     p.add_argument("--chatterbox-exaggeration", type=float, default=0.5,
                    help="Chatterbox exaggeration level (0.0-1.0, default 0.5).")
     p.add_argument("--chatterbox-cfg", type=float, default=0.5,
@@ -216,11 +221,19 @@ def add_segment_mode(p: argparse.ArgumentParser) -> None:
 
 def add_transcription(p: argparse.ArgumentParser) -> None:
     p.add_argument(
-        "--transcribe-method", default="faster-whisper", choices=["openai", "faster-whisper", "whisperx"],
-        help="Transcription backend: 'faster-whisper' (default), 'openai', or 'whisperx'.",
+        "--transcribe-method", default="faster-whisper", choices=["openai", "faster-whisper", "whisperx", "mlx-whisper"],
+        help="Transcription backend: 'faster-whisper' (default), 'openai', 'whisperx', or 'mlx-whisper' (Apple Silicon).",
     )
-    p.add_argument("--whisper-model", default=None, help="Whisper model name.")
-    p.add_argument("--beam-size", type=int, default=5, help="Beam size for decoding (default: 5).")
+    p.add_argument("--whisper-model", default=None, help="Whisper model name (for openai/faster-whisper/whisperx).")
+    p.add_argument("--mlx-whisper-model", default=DEFAULT_MLX_WHISPER_MODEL,
+                   help=f"MLX Whisper model name (default: {DEFAULT_MLX_WHISPER_MODEL}).")
+    p.add_argument(
+        "--beam-size",
+        type=int,
+        default=None,
+        help="Beam size for decoding when supported by the selected backend (for example, faster-whisper). "
+             "Leave unset for mlx-whisper.",
+    )
 
 
 def add_cookies(p: argparse.ArgumentParser) -> None:

@@ -162,6 +162,9 @@ mazinger transcribe audio.mp3 -o subs.srt --method faster-whisper --device cuda
 
 # Local with WhisperX (requires transcribe-whisperx extra)
 mazinger transcribe audio.mp3 -o subs.srt --method whisperx --device cuda
+
+# MLX Whisper (Apple Silicon, requires transcribe-mlx extra)
+mazinger transcribe audio.mp3 -o subs.srt --method mlx-whisper
 ```
 
 ### Extract thumbnails
@@ -275,6 +278,28 @@ mazinger speak --srt translated.srt --original-audio audio.mp3 \
     --chatterbox-exaggeration 0.7 \
     --chatterbox-cfg 0.3 \
     -o dubbed.wav
+```
+
+## Use MLX (Apple Silicon)
+
+Add `--tts-engine mlx` to use MLX-accelerated TTS (requires Apple Silicon):
+
+```bash
+mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
+    --clone-profile abubakr \
+    --tts-engine mlx
+
+mazinger speak --srt translated.srt --original-audio audio.mp3 \
+    --voice-sample speaker.m4a \
+    --voice-script speaker_transcript.txt \
+    --tts-engine mlx \
+    -o dubbed.wav
+```
+
+For transcription with MLX Whisper:
+
+```bash
+mazinger transcribe audio.mp3 -o subs.srt --method mlx-whisper
 ```
 
 ## Control Playback Speed

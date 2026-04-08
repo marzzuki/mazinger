@@ -20,13 +20,13 @@
 Mazinger chains ten stages into a single pipeline:
 
 1. **Download** — fetch a video from a URL or ingest a local file, extract the audio track
-2. **Transcribe** — convert speech to SRT subtitles (OpenAI Whisper API, faster-whisper, or WhisperX)
+2. **Transcribe** — convert speech to SRT subtitles (OpenAI Whisper API, faster-whisper, WhisperX, or MLX Whisper)
 3. **Thumbnails** — use an LLM to pick key frames from the video for visual context
 4. **Describe** — analyze the transcript and thumbnails to produce a structured summary (title, key points, keywords)
 5. **Review** — optionally refine ASR output: fix typos, reshape punctuation, and convert technical terms to English
 6. **Translate** — translate the SRT into another language with duration-aware word budgets
 7. **Re-segment** — merge fragments and split oversized subtitles for readability
-8. **Speak** — synthesize voice-cloned speech for every subtitle entry (Qwen3-TTS or Chatterbox), with 16 pre-defined voice themes or your own voice sample
+8. **Speak** — synthesize voice-cloned speech for every subtitle entry (Qwen3-TTS, Chatterbox, or MLX), with 16 pre-defined voice themes or your own voice sample
 9. **Assemble** — place each audio segment on the original timeline with optional tempo adjustment, loudness matching, and background audio mixing
 10. **Subtitle** — burn styled subtitles into the video and/or mux the new audio track
 
@@ -38,6 +38,7 @@ Every stage can run independently or as part of the full pipeline. Interrupted r
 - ffmpeg installed and on `PATH` (`apt install ffmpeg` / `brew install ffmpeg`)
 - An OpenAI API key for LLM-powered stages (transcription, translation, thumbnails, description)
 - A CUDA GPU for local transcription and TTS (not needed for cloud-only workflows)
+- Apple Silicon (M1/M2/M3/M4/M5) for MLX-accelerated TTS and transcription (optional)
 
 ## Installation
 
@@ -57,10 +58,15 @@ pip install "mazinger[transcribe-whisperx]"    # WhisperX (optional, word-level 
 # Voice synthesis
 pip install "mazinger[tts]"                    # Qwen3-TTS (voice sample + transcript)
 pip install "mazinger[tts-chatterbox]"         # Chatterbox (voice sample only, emotion control)
+pip install "mazinger[tts-mlx]"                # MLX Qwen3-TTS (Apple Silicon)
+
+# MLX transcription (Apple Silicon)
+pip install "mazinger[transcribe-mlx]"         # MLX Whisper (Apple Silicon)
 
 # Full bundles
 pip install "mazinger[all-qwen]"              # faster-whisper + Qwen3-TTS
 pip install "mazinger[all-chatterbox]"        # faster-whisper + Chatterbox
+pip install "mazinger[all-mlx]"               # MLX Whisper + MLX Qwen3-TTS
 ```
 
 > Qwen and Chatterbox require different `transformers` versions and cannot share an environment.

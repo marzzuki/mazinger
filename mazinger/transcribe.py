@@ -1,4 +1,4 @@
-"""Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, or WhisperX.
+"""Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, WhisperX, or MLX Whisper.
 
 Supports three transcription backends:
 - **openai** (default): Uses OpenAI's Whisper API. No local GPU required,
@@ -9,6 +9,8 @@ Supports three transcription backends:
 - **whisperx**: Local transcription with word-level alignment via wav2vec2.
   Requires PyTorch + CUDA and the [transcribe-whisperx] extra. Not compatible
   with chatterbox-tts due to conflicting transformers requirements.
+- **mlx-whisper**: MLX-accelerated Whisper for Apple Silicon. Runs natively
+  on M-series GPUs. Requires [transcribe-mlx] extra.
 """
 
 from __future__ import annotations
@@ -22,10 +24,13 @@ from typing import Any, Literal
 log = logging.getLogger(__name__)
 
 # Supported transcription methods
-TranscribeMethod = Literal["openai", "faster-whisper", "whisperx"]
+TranscribeMethod = Literal["openai", "faster-whisper", "whisperx", "mlx-whisper"]
 
 # Module-level cache for faster-whisper models — avoids reloading across runs
 _whisper_cache: dict[str, Any] = {}
+
+# Default MLX Whisper model
+DEFAULT_MLX_WHISPER_MODEL = "mlx-community/whisper-large-v3-turbo"
 
 
 def build_initial_prompt(video_meta: dict | None) -> str | None:
@@ -790,6 +795,92 @@ def _transcribe_whisperx(
     return raw_segments, detected_lang
 
 
+# ── MLX Whisper backend (Apple Silicon) ───────────────────────────────────────
+
+def _transcribe_mlx_whisper(
+    audio_path: str,
+    *,
+    model: str = DEFAULT_MLX_WHISPER_MODEL,
+    language: str | None = None,
+    initial_prompt: str | None = None,
+    condition_on_previous_text: bool = True,
+    vad_options: dict | None = None,
+    word_timestamps: bool = True,
+) -> tuple[list[dict], str]:
+    """Transcribe using MLX Whisper for Apple Silicon acceleration.
+
+    MLX Whisper runs natively on Apple Silicon GPUs without requiring PyTorch.
+    Uses sampling-based decoding (no beam search support).
+
+    Requires: pip install "mazinger[transcribe-mlx]"
+
+    Returns:
+        A tuple of (segments, detected_language).
+        Each segment has 'start', 'end', 'text', and 'words' keys.
+    """
+    import platform
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system != "Darwin" or machine not in {"arm64", "aarch64"}:
+        raise RuntimeError(
+            "MLX Whisper requires Apple Silicon (M1/M2/M3/M4/M5). "
+            f"Current platform: {system} ({platform.machine()}). "
+            "Use method='faster-whisper' or method='openai' instead."
+        )
+    try:
+        import mlx_whisper
+    except ImportError as e:
+        raise ImportError(
+            "mlx-whisper not installed. Install with: pip install 'mazinger[transcribe-mlx]'\n"
+            "Or use method='openai' for cloud-based transcription."
+        ) from None
+
+    audio_path = _preprocess_audio(audio_path)
+
+    log.info("Transcribing with MLX Whisper (model=%s)", model)
+
+    transcribe_kw: dict[str, Any] = {
+        "path_or_hf_repo": model,
+        "word_timestamps": word_timestamps,
+        "condition_on_previous_text": condition_on_previous_text,
+    }
+    if language:
+        transcribe_kw["language"] = language
+    if initial_prompt:
+        transcribe_kw["initial_prompt"] = initial_prompt
+    if vad_options and "no_speech_threshold" in vad_options:
+        transcribe_kw["no_speech_threshold"] = vad_options["no_speech_threshold"]
+
+    result = mlx_whisper.transcribe(audio_path, **transcribe_kw)
+
+    detected_lang = result.get("language", "unknown")
+    log.info("Detected language: %s", detected_lang)
+
+    raw_segments = []
+    for seg in result.get("segments", []):
+        segment_dict = {
+            "start": seg["start"],
+            "end": seg["end"],
+            "text": seg["text"].strip(),
+        }
+        if "words" in seg and seg["words"]:
+            segment_dict["words"] = [
+                {"word": w["word"], "start": w["start"], "end": w["end"]}
+                for w in seg["words"]
+            ]
+        raw_segments.append(segment_dict)
+
+    log.info("MLX Whisper transcription complete: %d segments", len(raw_segments))
+
+    try:
+        import mlx.core as mx
+        mx.clear_cache()
+    except Exception:
+        pass
+
+    return raw_segments, detected_lang
+
+
 # ── LLM-based text refinement ────────────────────────────────────────────────
 
 def _refine_segments_llm(
@@ -863,11 +954,12 @@ def transcribe(
     *,
     method: TranscribeMethod = "faster-whisper",
     model: str | None = None,
+    mlx_whisper_model: str = DEFAULT_MLX_WHISPER_MODEL,
     device: str = "cuda",
     batch_size: int = 4,
     compute_type: str = "float16",
     language: str | None = None,
-    beam_size: int = 5,
+    beam_size: int | None = 5,
     max_chars: int = 84,
     max_duration: float = 5.0,
     skip_resegment: bool = False,
@@ -878,14 +970,15 @@ def transcribe(
     initial_prompt: str | None = None,
     condition_on_previous_text: bool = True,
     vad_options: dict | None = None,
+    word_timestamps: bool = True,
 ) -> str:
-    """Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, or WhisperX.
+    """Transcribe audio to SRT using OpenAI Whisper API, faster-whisper, WhisperX, or MLX Whisper.
 
     Parameters:
         audio_path:     Path to the input audio file.
         output_path:    Where to save the final SRT.
         method:         Transcription backend: ``faster-whisper`` (default),
-                        ``openai``, or ``whisperx``.
+                        ``openai``, ``whisperx``, or ``mlx-whisper``.
         model:          Model name. Defaults to ``whisper-1`` for OpenAI,
                         ``large-v3`` for faster-whisper and WhisperX.
         device:         ``cuda`` or ``cpu`` (local methods only).
@@ -914,6 +1007,9 @@ def transcribe(
 
         # Using WhisperX (requires [transcribe-whisperx] extra)
         transcribe("audio.mp3", "output.srt", method="whisperx", device="cuda")
+
+        # Using MLX Whisper (Apple Silicon, requires [transcribe-mlx] extra)
+        transcribe("audio.mp3", "output.srt", method="mlx-whisper")
     """
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
@@ -954,8 +1050,24 @@ def transcribe(
             compute_type=compute_type,
             language=language,
         )
+    elif method == "mlx-whisper":
+        if beam_size is not None:
+            raise ValueError(
+                "beam_size not supported with mlx-whisper (uses sampling-based decoding). "
+                "Use method='faster-whisper' or method='whisperx' for beam search."
+            )
+        log.info("MLX Whisper uses sampling-based decoding")
+        raw_segments, detected_lang = _transcribe_mlx_whisper(
+            audio_path,
+            model=mlx_whisper_model,
+            language=language,
+            initial_prompt=initial_prompt,
+            condition_on_previous_text=condition_on_previous_text,
+            vad_options=vad_options,
+            word_timestamps=word_timestamps,
+        )
     else:
-        raise ValueError(f"Unknown transcription method: {method!r}. Use 'openai', 'faster-whisper', or 'whisperx'.")
+        raise ValueError(f"Unknown transcription method: {method!r}. Use 'openai', 'faster-whisper', 'whisperx', or 'mlx-whisper'.")
 
     log.info("Transcription complete: %d segments, language=%s", len(raw_segments), detected_lang)
 

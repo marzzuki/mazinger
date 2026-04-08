@@ -79,22 +79,25 @@ TTS synthesis has finer granularity — individual segment WAVs (`seg_0001.wav`,
 | OpenAI Whisper API | `openai` | `whisper-1` | No | Pay per audio minute |
 | faster-whisper | `faster-whisper` | `large-v3` | Yes (or CPU) | Free |
 | WhisperX | `whisperx` | `large-v3` | Yes | Free |
+| MLX Whisper | `mlx-whisper` | `mlx-community/whisper-large-v3-turbo` | Apple Silicon | Free |
 
 **Choosing a method:**
 
+- Using MLX (Apple Silicon) → pick `mlx-whisper` (no CUDA needed)
 - Using Chatterbox TTS → pick `openai` or `faster-whisper` (WhisperX conflicts)
 - Need offline processing → pick `faster-whisper` (default)
 - Need word-level alignment → pick `whisperx` with Qwen TTS (requires `transcribe-whisperx` extra)
 
 ## TTS Engines
 
-| Feature | Qwen3-TTS | Chatterbox |
-|---------|-----------|------------|
-| Voice cloning requires | Audio + transcript | Audio only |
-| Emotion control | No | Yes (`exaggeration` param) |
-| Pacing control | No | Yes (`cfg` param) |
-| Languages | 10 | 23 |
-| Default model | `Qwen/Qwen3-TTS-12Hz-1.7B-Base` | `ResembleAI/chatterbox` |
+| Feature | Qwen3-TTS | Chatterbox | MLX |
+|---------|-----------|------------|-----|
+| Voice cloning requires | Audio + transcript | Audio only | Audio + transcript |
+| Emotion control | No | Yes (`exaggeration` param) | No |
+| Pacing control | No | Yes (`cfg` param) | No |
+| Languages | 10 | 23 | 10+ |
+| Default model | `Qwen/Qwen3-TTS-12Hz-1.7B-Base` | `ResembleAI/chatterbox` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` |
+| Hardware | CUDA GPU | CUDA GPU | Apple Silicon |
 
 ### Chatterbox Parameter Guide
 

@@ -42,6 +42,7 @@ Converts the audio track into SRT subtitles. Three backends are available:
 | OpenAI Whisper API | Cloud | API key |
 | faster-whisper | Local, CTranslate2 | `transcribe-faster` extra, CUDA GPU |
 | WhisperX | Local, PyTorch + wav2vec2 | `transcribe-whisperx` extra, CUDA GPU |
+| MLX Whisper | Local, Apple MLX | `transcribe-mlx` extra, Apple Silicon (M1/M2/M3/M4/M5) |
 
 **Audio preprocessing:** Before transcription, the audio is automatically converted to 16 kHz mono WAV — the native format Whisper was trained on. This avoids lossy-codec artefacts and redundant internal resampling.
 
