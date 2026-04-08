@@ -227,7 +227,13 @@ def add_transcription(p: argparse.ArgumentParser) -> None:
     p.add_argument("--whisper-model", default=None, help="Whisper model name (for openai/faster-whisper/whisperx).")
     p.add_argument("--mlx-whisper-model", default=DEFAULT_MLX_WHISPER_MODEL,
                    help=f"MLX Whisper model name (default: {DEFAULT_MLX_WHISPER_MODEL}).")
-    p.add_argument("--beam-size", type=int, default=5, help="Beam size for decoding (default: 5).")
+    p.add_argument(
+        "--beam-size",
+        type=int,
+        default=None,
+        help="Beam size for decoding when supported by the selected backend (for example, faster-whisper). "
+             "Leave unset for mlx-whisper.",
+    )
 
 
 def add_cookies(p: argparse.ArgumentParser) -> None:
