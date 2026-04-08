@@ -819,10 +819,12 @@ def _transcribe_mlx_whisper(
         Each segment has 'start', 'end', 'text', and 'words' keys.
     """
     import platform
-    if platform.system() != "Darwin":
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system != "Darwin" or machine not in {"arm64", "aarch64"}:
         raise RuntimeError(
             "MLX Whisper requires Apple Silicon (M1/M2/M3/M4/M5). "
-            f"Current platform: {platform.system()} ({platform.machine()}). "
+            f"Current platform: {system} ({platform.machine()}). "
             "Use method='faster-whisper' or method='openai' instead."
         )
     try:
