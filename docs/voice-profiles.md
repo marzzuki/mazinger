@@ -402,7 +402,7 @@ You can use your own private HuggingFace dataset instead of the default public o
 **1. Set environment variables:**
 
 ```bash
-# Your HuggingFace write token (from https://huggingface.co/settings/tokens)
+# Your HuggingFace token (from https://huggingface.co/settings/tokens)
 export HF_TOKEN="hf_..."
 
 # Your private dataset URL
@@ -435,6 +435,7 @@ cp your-transcript.txt profiles/your-voice-name/script.txt
 
 hf upload YOUR_USERNAME/mazinger-dubber-profiles \
     ./profiles/your-voice-name \
+    profiles/your-voice-name \
     --repo-type dataset
 ```
 
@@ -451,7 +452,7 @@ mazinger dub "https://youtube.com/watch?v=VIDEO_ID" \
 When you set `MAZINGER_PROFILES_REPO_URL`:
 
 1. Custom repo is checked first
-2. If profile exists in both custom and default → prompts you to select (CLI) or raises error (API)
+2. If profile exists in both custom and default → uses custom repo
 3. Falls back to default repo if not found in custom
 
 ### Python API
