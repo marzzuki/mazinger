@@ -696,10 +696,8 @@ def fetch_profile(profile_name: str, cache_dir: str | None = None) -> tuple[str,
             choice = input("Select repo (1/2): ").strip()
             base_url = custom_url if choice == "2" else default_url
         else:
-            raise ValueError(
-                f"Profile '{profile_name}' exists in both default and custom repos. "
-                f"Run interactively to select, or unset MAZINGER_PROFILES_REPO_URL."
-            )
+            base_url = custom_url
+            log.info("Profile found in both repos, using custom repo")
     elif in_custom:
         base_url = custom_url
     elif in_default:
