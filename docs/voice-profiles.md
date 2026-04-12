@@ -458,12 +458,12 @@ When you set `MAZINGER_PROFILES_REPO_URL`:
 ### Python API
 
 ```python
-from mazinger.profiles import fetch_profile
 import os
 
 os.environ["HF_TOKEN"] = "hf_..."
 os.environ["MAZINGER_PROFILES_REPO_URL"] = "https://huggingface.co/datasets/..."
 
+from mazinger.profiles import fetch_profile
 voice, script = fetch_profile("your-voice-name")
 ```
 
